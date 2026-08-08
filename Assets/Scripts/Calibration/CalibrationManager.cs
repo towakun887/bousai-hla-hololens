@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System;
 
 public class CalibrationManager : MonoBehaviour
 {
@@ -17,6 +18,7 @@ public class CalibrationManager : MonoBehaviour
 
     public enum CalibrationState { WaitingForQR, Connecting, Collecting, Calibrated, Failed, DriftWarning }
     public CalibrationState CurrentState { get; private set; } = CalibrationState.WaitingForQR;
+    public event Action StatusChanged;
 
     private List<LocationData> collectedSamples = new List<LocationData>();
     private float calibrationStartTime;
@@ -30,10 +32,21 @@ public class CalibrationManager : MonoBehaviour
     private Vector3 lastCalibratedPos;
     private float timeSinceCalibrated;
     private float accumulatedDistance;
+    private Camera mainCamera;
+    private float driftDistanceThreshold;
+    private float driftTimeThreshold;
+
+    private double StrictAccuracyThreshold => System.Math.Max(accuracyThreshold, 10.0);
+    private double RelaxedAccuracyThreshold => System.Math.Max(StrictAccuracyThreshold * 4.0, 40.0);
 
     private void Awake()
     {
-        if (Instance == null) Instance = this;
+        if (Instance == null)
+        {
+            Instance = this;
+            mainCamera = Camera.main;
+            ReloadDriftSettings();
+        }
         else Destroy(gameObject);
     }
 
@@ -52,6 +65,22 @@ public class CalibrationManager : MonoBehaviour
         }
         
         calibrationStartTime = Time.time;
+        StatusChanged?.Invoke();
+    }
+
+    private void OnDestroy()
+    {
+        if (QRCodeTracker.Instance != null)
+        {
+            QRCodeTracker.Instance.OnQRCodeDetected -= HandleQRDetected;
+            QRCodeTracker.Instance.OnQRCodeLost -= HandleQRLost;
+        }
+        if (TcpLocationClient.Instance != null)
+        {
+            TcpLocationClient.Instance.OnLocationReceived -= HandleLocationReceived;
+            TcpLocationClient.Instance.OnError -= HandleTcpError;
+        }
+        if (Instance == this) Instance = null;
     }
 
     private void HandleQRDetected(string ip, int port, string deviceId, Vector3 pos, Quaternion rot)
@@ -67,7 +96,7 @@ public class CalibrationManager : MonoBehaviour
             
             if (isMock)
             {
-                CurrentState = CalibrationState.Collecting;
+                SetState(CalibrationState.Collecting);
                 
                 LocationData mockData = new LocationData
                 {
@@ -79,7 +108,8 @@ public class CalibrationManager : MonoBehaviour
                 };
 
                 // Calculate eunRotation so that North (Z) aligns with the current Camera forward
-                Vector3 targetNorthInPhoneLocal = Quaternion.Inverse(rot) * Camera.main.transform.forward;
+                if (mainCamera == null) mainCamera = Camera.main;
+                Vector3 targetNorthInPhoneLocal = Quaternion.Inverse(rot) * (mainCamera != null ? mainCamera.transform.forward : Vector3.forward);
                 targetNorthInPhoneLocal.y = 0; // flatten to horizontal plane
                 
                 if (targetNorthInPhoneLocal.sqrMagnitude > 0.001f)
@@ -107,13 +137,14 @@ public class CalibrationManager : MonoBehaviour
                 {
                     collectedSamples.Add(mockData);
                 }
+                NotifyStatusChanged();
 
                 CompleteCalibration();
                 return;
             }
 
             calibrationStartTime = Time.time; // Reset timeout counter when QR is first found!
-            CurrentState = CalibrationState.Connecting;
+            SetState(CalibrationState.Connecting);
             TcpLocationClient.Instance.Connect(ip, port, deviceId);
             if (PhoneVisualizer.Instance != null)
             {
@@ -139,6 +170,7 @@ public class CalibrationManager : MonoBehaviour
                 isContinuousCalibrating = true;
                 collectedSamples.Clear();
                 strictSamplesCount = 0;
+                NotifyStatusChanged();
                 
                 TcpLocationClient.Instance.Connect(ip, port, deviceId);
             }
@@ -191,18 +223,23 @@ public class CalibrationManager : MonoBehaviour
     {
         if (CurrentState == CalibrationState.Connecting)
         {
-            CurrentState = CalibrationState.Collecting;
+            SetState(CalibrationState.Collecting);
             strictSamplesCount = 0; // reset
         }
 
         if (CurrentState == CalibrationState.Collecting)
         {
-            bool isStrictHighAccuracy = data.isTracking && data.accuracy > 0 && data.accuracy <= 10.0f;
-            bool isRelaxedAccuracy = data.isTracking && data.accuracy > 0 && data.accuracy <= 40.0f;
+            bool isStrictHighAccuracy = data.isTracking && data.accuracy > 0 && data.accuracy <= StrictAccuracyThreshold;
+            bool isRelaxedAccuracy = data.isTracking && data.accuracy > 0 && data.accuracy <= RelaxedAccuracyThreshold;
             
             if (isRelaxedAccuracy || forceCalibration)
             {
                 collectedSamples.Add(data);
+                if (maxSamplesToCollect > 0 && collectedSamples.Count > maxSamplesToCollect)
+                {
+                    collectedSamples.RemoveAt(0);
+                }
+                NotifyStatusChanged();
                 if (isStrictHighAccuracy)
                 {
                     strictSamplesCount++;
@@ -226,7 +263,7 @@ public class CalibrationManager : MonoBehaviour
         }
         else if (CurrentState == CalibrationState.Calibrated && isContinuousCalibrating)
         {
-            bool isStrictHighAccuracy = data.isTracking && data.accuracy > 0 && data.accuracy <= 10.0f;
+            bool isStrictHighAccuracy = data.isTracking && data.accuracy > 0 && data.accuracy <= StrictAccuracyThreshold;
             
             if (isStrictHighAccuracy)
             {
@@ -235,6 +272,7 @@ public class CalibrationManager : MonoBehaviour
                 {
                     collectedSamples.RemoveAt(0); // Sliding window
                 }
+                NotifyStatusChanged();
 
                 if (PhoneVisualizer.Instance != null)
                 {
@@ -256,7 +294,8 @@ public class CalibrationManager : MonoBehaviour
                     }
                     
                     // Reset drift tracking relative to this new accurate position
-                    lastCalibratedPos = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
+                    if (mainCamera == null) mainCamera = Camera.main;
+                    lastCalibratedPos = mainCamera != null ? mainCamera.transform.position : Vector3.zero;
                     accumulatedDistance = 0f;
                     timeSinceCalibrated = 0f;
                 }
@@ -296,9 +335,10 @@ public class CalibrationManager : MonoBehaviour
         Debug.LogWarning("TCP Error: " + error);
         if (CurrentState == CalibrationState.Connecting || CurrentState == CalibrationState.Collecting)
         {
-            CurrentState = CalibrationState.Failed;
-            TcpLocationClient.Instance.Disconnect();
-            if (PhoneVisualizer.Instance != null) PhoneVisualizer.Instance.Hide();
+            if (PhoneVisualizer.Instance != null)
+            {
+                PhoneVisualizer.Instance.UpdateStatus("再接続中...", "GPS: 待機中", $"サンプル: {collectedSamples.Count}/{minSamplesRequired}");
+            }
         }
     }
 
@@ -313,7 +353,7 @@ public class CalibrationManager : MonoBehaviour
 
     private void CompleteCalibration()
     {
-        CurrentState = CalibrationState.Calibrated;
+        SetState(CalibrationState.Calibrated);
         
         bool isMock = QRCodeTracker.Instance != null && QRCodeTracker.Instance.IsMockMode;
         if (!isMock && !isQRVisible)
@@ -333,7 +373,8 @@ public class CalibrationManager : MonoBehaviour
         MarkerManager.Instance.GenerateMarkers();
         
         // Setup drift tracking
-        lastCalibratedPos = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
+        if (mainCamera == null) mainCamera = Camera.main;
+        lastCalibratedPos = mainCamera != null ? mainCamera.transform.position : Vector3.zero;
         accumulatedDistance = 0f;
         timeSinceCalibrated = 0f;
     }
@@ -353,7 +394,7 @@ public class CalibrationManager : MonoBehaviour
             bool isMock = QRCodeTracker.Instance != null && QRCodeTracker.Instance.IsMockMode;
             if (!isMock && Time.time - calibrationStartTime > timeoutSeconds)
             {
-                CurrentState = CalibrationState.Failed;
+                SetState(CalibrationState.Failed);
                 TcpLocationClient.Instance.Disconnect();
                 if (PhoneVisualizer.Instance != null) PhoneVisualizer.Instance.Hide();
             }
@@ -366,23 +407,39 @@ public class CalibrationManager : MonoBehaviour
     
     private void TrackDrift()
     {
-        float driftDistanceThreshold = PlayerPrefs.GetFloat("DriftDistanceThreshold", 200f);
-        float driftTimeThreshold = PlayerPrefs.GetFloat("DriftTimeThreshold", 30f) * 60f;
-        
         timeSinceCalibrated += Time.deltaTime;
         
-        if (Camera.main != null)
+        if (mainCamera == null) mainCamera = Camera.main;
+        if (mainCamera != null)
         {
-            Vector3 currentPos = Camera.main.transform.position;
+            Vector3 currentPos = mainCamera.transform.position;
             accumulatedDistance += Vector3.Distance(lastCalibratedPos, currentPos);
             lastCalibratedPos = currentPos;
         }
 
         if (accumulatedDistance > driftDistanceThreshold || timeSinceCalibrated > driftTimeThreshold)
         {
-            CurrentState = CalibrationState.DriftWarning;
+            SetState(CalibrationState.DriftWarning);
             Debug.LogWarning("Drift warning triggered.");
         }
+    }
+
+    public void ReloadDriftSettings()
+    {
+        driftDistanceThreshold = PlayerPrefs.GetFloat("DriftDistanceThreshold", 200f);
+        driftTimeThreshold = PlayerPrefs.GetFloat("DriftTimeThreshold", 30f) * 60f;
+    }
+
+    private void SetState(CalibrationState state)
+    {
+        if (CurrentState == state) return;
+        CurrentState = state;
+        StatusChanged?.Invoke();
+    }
+
+    private void NotifyStatusChanged()
+    {
+        StatusChanged?.Invoke();
     }
     
     public int GetCollectedSampleCount() => collectedSamples.Count;

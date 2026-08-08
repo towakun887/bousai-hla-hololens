@@ -1,62 +1,65 @@
-using UnityEngine;
+using MixedReality.Toolkit;
 using TMPro;
-using UnityEngine.UI;
-using MixedReality.Toolkit; // MRTK3
+using UnityEngine;
 
 public class CalibrationUI : MonoBehaviour
 {
     [SerializeField] private GameObject panel;
     [SerializeField] private TextMeshProUGUI statusText;
     [SerializeField] private TextMeshProUGUI progressText;
-    [SerializeField] private StatefulInteractable forceButton; // MRTK3のStatefulInteractable（ボタン）
+    [SerializeField] private StatefulInteractable forceButton;
 
-    private void Update()
+    private void OnEnable()
+    {
+        if (CalibrationManager.Instance != null)
+            CalibrationManager.Instance.StatusChanged += Refresh;
+        Refresh();
+    }
+
+    private void Start()
+    {
+        if (CalibrationManager.Instance != null)
+        {
+            CalibrationManager.Instance.StatusChanged -= Refresh;
+            CalibrationManager.Instance.StatusChanged += Refresh;
+        }
+        Refresh();
+    }
+
+    private void OnDisable()
+    {
+        if (CalibrationManager.Instance != null)
+            CalibrationManager.Instance.StatusChanged -= Refresh;
+    }
+
+    private void Refresh()
     {
         if (CalibrationManager.Instance == null) return;
+        CalibrationManager.CalibrationState state = CalibrationManager.Instance.CurrentState;
+        bool calibrated = state == CalibrationManager.CalibrationState.Calibrated;
+        if (panel != null && panel.activeSelf == calibrated)
+            panel.SetActive(!calibrated);
+        if (calibrated) return;
 
-        var state = CalibrationManager.Instance.CurrentState;
-        
-        if (state == CalibrationManager.CalibrationState.Calibrated)
+        string status = state switch
         {
-            if (panel.activeSelf) panel.SetActive(false);
-            return;
-        }
+            CalibrationManager.CalibrationState.WaitingForQR => "QRコードを検出してください",
+            CalibrationManager.CalibrationState.Connecting => "スマートフォンに接続中...",
+            CalibrationManager.CalibrationState.Collecting => "GPSデータ収集中...",
+            CalibrationManager.CalibrationState.Failed => "タイムアウトまたはエラー。再試行してください",
+            CalibrationManager.CalibrationState.DriftWarning => "⚠ 精度低下の可能性。再キャリブレーション推奨",
+            _ => string.Empty
+        };
+        if (statusText != null && statusText.text != status) statusText.text = status;
 
-        if (!panel.activeSelf) panel.SetActive(true);
-
-        switch (state)
-        {
-            case CalibrationManager.CalibrationState.WaitingForQR:
-                statusText.text = "QRコードを検出してください";
-                break;
-            case CalibrationManager.CalibrationState.Connecting:
-                statusText.text = "スマートフォンに接続中...";
-                break;
-            case CalibrationManager.CalibrationState.Collecting:
-                statusText.text = "GPSデータ収集中...";
-                break;
-            case CalibrationManager.CalibrationState.Failed:
-                statusText.text = "タイムアウトまたはエラー。再試行してください";
-                break;
-            case CalibrationManager.CalibrationState.DriftWarning:
-                statusText.text = "⚠ 精度低下の可能性。再キャリブレーション推奨";
-                break;
-        }
-
-        progressText.text = $"サンプル: {CalibrationManager.Instance.GetCollectedSampleCount()}";
-        
-        if (forceButton != null)
-        {
-            // MRTK3のインタラクタブルは .enabled を切り替えることで有効/無効を制御し、ビジュアルも連動します
-            forceButton.enabled = CalibrationManager.Instance.GetCollectedSampleCount() > 0;
-        }
+        int count = CalibrationManager.Instance.GetCollectedSampleCount();
+        if (progressText != null) progressText.SetText("サンプル: {0}", count);
+        if (forceButton != null && forceButton.enabled != (count > 0))
+            forceButton.enabled = count > 0;
     }
 
     public void OnForceCalibrationClicked()
     {
-        if (CalibrationManager.Instance != null)
-        {
-            CalibrationManager.Instance.ForceCalibration();
-        }
+        CalibrationManager.Instance?.ForceCalibration();
     }
 }

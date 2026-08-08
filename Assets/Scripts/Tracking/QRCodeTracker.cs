@@ -1,7 +1,6 @@
-using UnityEngine;
 using System;
-using System.Linq;
 using Microsoft.MixedReality.OpenXR;
+using UnityEngine;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
@@ -11,31 +10,54 @@ public class QRCodeTracker : MonoBehaviour
 
     public Action<string, int, string, Vector3, Quaternion> OnQRCodeDetected;
     public Action OnQRCodeLost;
+    public Action OnStatusChanged;
+
+    [Header("Tracking Timing")]
+    [SerializeField, Min(0.02f)] private float notificationInterval = 0.1f;
+    [SerializeField, Min(0f)] private float lostGracePeriod = 0.5f;
 
     [Header("Mock Settings")]
-    [SerializeField] private bool useMockInEditor = false;
+    [SerializeField] private bool useMockInEditor;
     [SerializeField] private string mockIp = "127.0.0.1";
     [SerializeField] private int mockPort = 5000;
     [SerializeField] private string mockDeviceId = "MockDevice";
 
-    public bool IsMockMode => useMockInEditor;
+    private enum TrackingPhase
+    {
+        Searching,
+        Tracking,
+        TemporarilyLost,
+        Lost
+    }
 
-    private bool isTracking = false;
+    private TrackingPhase phase = TrackingPhase.Searching;
     private ARMarker currentActiveMarker;
-
-    private string currentIp = "";
+    private Camera mainCamera;
+    private float lastNotificationTime = float.NegativeInfinity;
+    private float temporarilyLostAt;
+    private Vector3 lastValidPosition;
+    private Quaternion lastValidRotation = Quaternion.identity;
+    private string currentIp = string.Empty;
     private int currentPort = 5000;
-    private string currentDeviceId = "";
+    private string currentDeviceId = string.Empty;
+    private string debugStatus = "Initializing...";
 
-    public bool IsQRCodeLocated => isTracking;
-    public bool IsQRCodeDetected => currentActiveMarker != null || isTracking;
-
-    public string DebugStatus { get; private set; } = "Initializing...";
+    public bool IsMockMode => useMockInEditor;
+    public bool IsQRCodeLocated => phase == TrackingPhase.Tracking;
+    public bool IsQRCodeDetected => currentActiveMarker != null || phase == TrackingPhase.Tracking || phase == TrackingPhase.TemporarilyLost;
+    public string DebugStatus => debugStatus;
 
     private void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        if (Instance == null)
+        {
+            Instance = this;
+            mainCamera = Camera.main;
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
     }
 
     private void Start()
@@ -43,137 +65,232 @@ public class QRCodeTracker : MonoBehaviour
 #if UNITY_EDITOR
         if (useMockInEditor)
         {
-            Debug.Log("QRCodeTracker: Using Mock in Editor.");
-            DebugStatus = "Mock Mode (Editor)";
-            Invoke(nameof(SimulateQRDetect), 1.0f); // Auto-trigger mock detection after 1 second
+            SetDebugStatus("Mock Mode (Editor)");
+            Invoke(nameof(SimulateQRDetect), 1f);
             return;
         }
 #endif
 
         if (ARMarkerManager.Instance == null)
         {
-            DebugStatus = "Error: ARMarkerManager not found in scene!";
+            SetDebugStatus("Error: ARMarkerManager not found in scene!");
             Debug.LogError("QRCodeTracker: ARMarkerManager instance is null. Please add ARMarkerManager to your XR Origin.");
             return;
         }
 
         ARMarkerManager.Instance.markersChanged += OnMarkersChanged;
-        DebugStatus = "Started. Waiting for QR...";
+        SetDebugStatus("Started. Waiting for QR...");
     }
 
     private void OnDestroy()
     {
+        CancelInvoke();
         if (ARMarkerManager.Instance != null)
         {
             ARMarkerManager.Instance.markersChanged -= OnMarkersChanged;
+        }
+
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
+
+    private void Update()
+    {
+#if UNITY_EDITOR
+        if (useMockInEditor)
+        {
+            if (phase == TrackingPhase.Tracking)
+            {
+                NotifyTrackingIfDue(false);
+            }
+            else if (phase == TrackingPhase.TemporarilyLost)
+            {
+                UpdateTemporaryLoss();
+            }
+            return;
+        }
+#endif
+
+        if (currentActiveMarker == null)
+        {
+            return;
+        }
+
+        if (currentActiveMarker.trackingState == TrackingState.Tracking)
+        {
+            lastValidPosition = currentActiveMarker.transform.position;
+            lastValidRotation = currentActiveMarker.transform.rotation;
+            bool recovered = phase != TrackingPhase.Tracking;
+            if (recovered)
+            {
+                phase = TrackingPhase.Tracking;
+                SetDebugStatus("Successfully located QR code in 3D space.");
+            }
+            NotifyTrackingIfDue(recovered);
+        }
+        else if (phase == TrackingPhase.Tracking)
+        {
+            phase = TrackingPhase.TemporarilyLost;
+            temporarilyLostAt = Time.unscaledTime;
+            SetDebugStatus("QR tracking temporarily unavailable.");
+        }
+        else if (phase == TrackingPhase.TemporarilyLost)
+        {
+            UpdateTemporaryLoss();
         }
     }
 
     public void SimulateQRDetect()
     {
 #if UNITY_EDITOR
-        if (useMockInEditor)
+        if (!useMockInEditor)
         {
-            isTracking = true;
-            Vector3 pos = Camera.main != null ? Camera.main.transform.position + Camera.main.transform.forward * 1.0f : Vector3.forward;
-            Quaternion rot = Quaternion.identity;
-            
-            OnQRCodeDetected?.Invoke(mockIp, mockPort, mockDeviceId, pos, rot);
+            return;
+        }
+
+        if (mainCamera == null)
+        {
+            mainCamera = Camera.main;
+        }
+        lastValidPosition = mainCamera != null
+            ? mainCamera.transform.position + mainCamera.transform.forward
+            : Vector3.forward;
+        lastValidRotation = Quaternion.identity;
+        phase = TrackingPhase.Tracking;
+        SetDebugStatus("Mock QR tracking");
+        NotifyTrackingIfDue(true);
+#endif
+    }
+
+    public void SimulateTemporaryTrackingLoss()
+    {
+#if UNITY_EDITOR
+        if (useMockInEditor && phase == TrackingPhase.Tracking)
+        {
+            phase = TrackingPhase.TemporarilyLost;
+            temporarilyLostAt = Time.unscaledTime;
+            SetDebugStatus("Mock QR temporarily lost");
         }
 #endif
     }
-    
+
     public void SimulateQRLost()
     {
 #if UNITY_EDITOR
-        isTracking = false;
-        OnQRCodeLost?.Invoke();
+        if (useMockInEditor)
+        {
+            EnterLost("Mock QR lost");
+        }
 #endif
     }
 
-    private void Update()
+    private void NotifyTrackingIfDue(bool force)
     {
-#if UNITY_EDITOR
-        if (useMockInEditor) return;
-#endif
-
-        if (currentActiveMarker != null)
+        float now = Time.unscaledTime;
+        if (!force && now - lastNotificationTime < notificationInterval)
         {
-            // ARMarkerManager automatically updates the Transform of the ARMarker GameObject.
-            // If the tracking state is tracking, we can use its position.
-            if (currentActiveMarker.trackingState == TrackingState.Tracking)
-            {
-                if (!isTracking)
-                {
-                    DebugStatus = "Successfully located QR code in 3D space.";
-                    Debug.Log("Successfully located QR code in 3D space.");
-                }
-                isTracking = true;
-
-                // Fire the event continuously so that the UI can stick to the QR code perfectly.
-                OnQRCodeDetected?.Invoke(currentIp, currentPort, currentDeviceId, currentActiveMarker.transform.position, currentActiveMarker.transform.rotation);
-            }
-            else
-            {
-                if (isTracking)
-                {
-                    DebugStatus = "Lost 3D position of QR code.";
-                }
-                isTracking = false;
-            }
+            return;
         }
+
+        lastNotificationTime = now;
+        OnQRCodeDetected?.Invoke(currentIp.Length > 0 ? currentIp : mockIp,
+            currentIp.Length > 0 ? currentPort : mockPort,
+            currentDeviceId.Length > 0 ? currentDeviceId : mockDeviceId,
+            lastValidPosition,
+            lastValidRotation);
+    }
+
+    private void UpdateTemporaryLoss()
+    {
+        if (Time.unscaledTime - temporarilyLostAt >= lostGracePeriod)
+        {
+            EnterLost("QR Code Lost.");
+        }
+    }
+
+    private void EnterLost(string status)
+    {
+        if (phase == TrackingPhase.Lost || phase == TrackingPhase.Searching)
+        {
+            return;
+        }
+
+        phase = TrackingPhase.Lost;
+        SetDebugStatus(status);
+        OnQRCodeLost?.Invoke();
     }
 
     private void OnMarkersChanged(ARMarkersChangedEventArgs args)
     {
-        // Handle added or updated markers
-        foreach (var marker in args.added.Concat(args.updated))
+        foreach (ARMarker marker in args.added)
         {
-            // ARMarkerManager might track different types of markers, ensure it's a QR code
-            if (marker.markerType == ARMarkerType.QRCode)
-            {
-                if (currentActiveMarker != marker)
-                {
-                    string decodedString = ARMarkerManager.Instance.GetDecodedString(marker.trackableId);
-                    if (!string.IsNullOrEmpty(decodedString) && ParseQRData(decodedString))
-                    {
-                        currentActiveMarker = marker;
-                        DebugStatus = $"Parsed QR: {decodedString}";
-                        Debug.Log("QRCodeTracker: Parsed new QR code data.");
-                    }
-                }
-            }
+            ProcessMarker(marker);
         }
-
-        // Handle removed markers
-        foreach (var marker in args.removed)
+        foreach (ARMarker marker in args.updated)
+        {
+            ProcessMarker(marker);
+        }
+        foreach (ARMarker marker in args.removed)
         {
             if (currentActiveMarker != null && marker.trackableId == currentActiveMarker.trackableId)
             {
                 currentActiveMarker = null;
-                isTracking = false;
-                OnQRCodeLost?.Invoke();
-                DebugStatus = "QR Code Lost (Removed).";
+                EnterLost("QR Code Lost (Removed).");
             }
+        }
+    }
+
+    private void ProcessMarker(ARMarker marker)
+    {
+        if (marker.markerType != ARMarkerType.QRCode)
+        {
+            return;
+        }
+
+        bool isNewTrackable = currentActiveMarker == null || currentActiveMarker.trackableId != marker.trackableId;
+        if (isNewTrackable)
+        {
+            string decodedString = ARMarkerManager.Instance.GetDecodedString(marker.trackableId);
+            if (string.IsNullOrEmpty(decodedString) || !ParseQRData(decodedString))
+            {
+                return;
+            }
+            currentActiveMarker = marker;
+            SetDebugStatus("Parsed QR code data.");
+        }
+
+        if (currentActiveMarker != null && marker.trackableId == currentActiveMarker.trackableId &&
+            marker.trackingState == TrackingState.Tracking)
+        {
+            lastValidPosition = marker.transform.position;
+            lastValidRotation = marker.transform.rotation;
+            bool recovered = phase != TrackingPhase.Tracking;
+            phase = TrackingPhase.Tracking;
+            NotifyTrackingIfDue(isNewTrackable || recovered);
         }
     }
 
     private bool ParseQRData(string data)
     {
-        try 
+        try
         {
-            string ip = "";
+            string ip = string.Empty;
             int port = 5000;
-            string deviceId = "";
-
+            string deviceId = string.Empty;
             string[] parts = data.Split(',');
+
             if (parts.Length >= 1)
             {
                 string[] ipPort = parts[0].Split(':');
                 if (ipPort.Length == 2)
                 {
                     ip = ipPort[0];
-                    int.TryParse(ipPort[1], out port);
+                    if (!int.TryParse(ipPort[1], out port))
+                    {
+                        port = 5000;
+                    }
                 }
             }
             if (parts.Length >= 2)
@@ -185,20 +302,30 @@ public class QRCodeTracker : MonoBehaviour
                 }
             }
 
-            // Only update if we successfully parsed an IP
-            if (!string.IsNullOrEmpty(ip))
+            if (string.IsNullOrEmpty(ip))
             {
-                currentIp = ip;
-                currentPort = port;
-                currentDeviceId = deviceId;
-                return true;
+                return false;
             }
-            return false;
+
+            currentIp = ip;
+            currentPort = port;
+            currentDeviceId = deviceId;
+            return true;
         }
-        catch(Exception e)
+        catch (Exception exception)
         {
-            Debug.LogError("Failed to parse QR code: " + e.Message);
+            Debug.LogError("Failed to parse QR code: " + exception.Message);
             return false;
         }
+    }
+
+    private void SetDebugStatus(string value)
+    {
+        if (debugStatus == value)
+        {
+            return;
+        }
+        debugStatus = value;
+        OnStatusChanged?.Invoke();
     }
 }

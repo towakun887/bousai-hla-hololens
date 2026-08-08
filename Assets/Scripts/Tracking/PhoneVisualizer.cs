@@ -22,6 +22,7 @@ public class PhoneVisualizer : MonoBehaviour
     private Quaternion targetRot;
     private bool isVisible = false;
     private bool isLost = false;
+    private Material frameMaterial;
 
     private void Awake()
     {
@@ -33,8 +34,8 @@ public class PhoneVisualizer : MonoBehaviour
         {
             frameRenderer.enabled = false;
             // 照明の影響を受けず、裏側から見ても透明にならないように UI/Default シェーダーを適用
-            Material unlitMat = new Material(Shader.Find("UI/Default"));
-            frameRenderer.material = unlitMat;
+            frameMaterial = new Material(Shader.Find("UI/Default"));
+            frameRenderer.sharedMaterial = frameMaterial;
         }
     }
 
@@ -66,28 +67,29 @@ public class PhoneVisualizer : MonoBehaviour
 
     public void SetLost(bool lost)
     {
+        if (isLost == lost) return;
         isLost = lost;
         if (lostWarning != null) lostWarning.SetActive(lost);
-        if (lost && frameRenderer != null)
+        if (lost && frameMaterial != null)
         {
-            frameRenderer.material.color = Color.red;
+            frameMaterial.color = Color.red;
         }
     }
 
     public void UpdateStatus(string state, string gpsInfo, string progress)
     {
-        if (statusText != null) statusText.text = state;
-        if (gpsText != null) gpsText.text = gpsInfo;
-        if (progressText != null) progressText.text = progress;
+        if (statusText != null && statusText.text != state) statusText.text = state;
+        if (gpsText != null && gpsText.text != gpsInfo) gpsText.text = gpsInfo;
+        if (progressText != null && progressText.text != progress) progressText.text = progress;
 
         Color targetColor = colorDetect;
         if (state.Contains("接続中")) targetColor = colorConnect;
         else if (state.Contains("完了")) targetColor = colorDone;
         else if (gpsInfo.Contains("Tracking")) targetColor = colorGps;
 
-        if (frameRenderer != null && !isLost)
+        if (frameMaterial != null && !isLost && frameMaterial.color != targetColor)
         {
-            frameRenderer.material.color = targetColor;
+            frameMaterial.color = targetColor;
         }
     }
 
@@ -96,5 +98,11 @@ public class PhoneVisualizer : MonoBehaviour
         isVisible = false;
         if (overlayContainer != null) overlayContainer.SetActive(false);
         if (frameRenderer != null) frameRenderer.enabled = false;
+    }
+
+    private void OnDestroy()
+    {
+        if (frameMaterial != null) Destroy(frameMaterial);
+        if (Instance == this) Instance = null;
     }
 }

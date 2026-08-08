@@ -14,6 +14,7 @@ public class MarkerTableUI : MonoBehaviour
 
     private void Update()
     {
+        if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
         timer -= Time.deltaTime;
         if (timer <= 0f)
         {
@@ -67,7 +68,8 @@ public class MarkerTableUI : MonoBehaviour
             if (excessRow != null) Destroy(excessRow.gameObject);
         }
 
-        Vector3 cameraPos = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
+        Camera camera = Camera.main;
+        Vector3 cameraPos = camera != null ? camera.transform.position : Vector3.zero;
 
         // Update rows
         for (int i = 0; i < markers.Count; i++)
@@ -94,12 +96,10 @@ public class MarkerTableRow : MonoBehaviour
 
     public void UpdateData(MarkerData data, float distance)
     {
-        if (titleText == null) Debug.LogWarning($"[MarkerTableRow] titleText is null on row {gameObject.name}");
-        
-        if (titleText) titleText.text = string.IsNullOrEmpty(data.title) ? "<color=#888888>No Title</color>" : data.title;
-        if (latText) latText.text = data.latitude.ToString("F5");
-        if (lonText) lonText.text = data.longitude.ToString("F5");
-        if (altText) altText.text = data.altitude.ToString("F1") + "m";
-        if (distText) distText.text = distance.ToString("F1") + "m";
+        if (titleText) titleText.SetText(string.IsNullOrEmpty(data.title) ? "<color=#888888>No Title</color>" : data.title);
+        if (latText) latText.SetText("{0:F5}", (float)data.latitude);
+        if (lonText) lonText.SetText("{0:F5}", (float)data.longitude);
+        if (altText) altText.SetText("{0:F1}m", (float)data.altitude);
+        if (distText) distText.SetText("{0:F1}m", distance);
     }
 }

@@ -73,6 +73,7 @@ public class SettingsPanel : MonoBehaviour
         }
 
         PlayerPrefs.Save();
+        CalibrationManager.Instance?.ReloadDriftSettings();
         
         if (MarkerManager.Instance != null)
         {

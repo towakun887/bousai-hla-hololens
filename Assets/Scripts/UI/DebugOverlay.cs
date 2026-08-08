@@ -8,6 +8,8 @@ public class DebugOverlay : MonoBehaviour
     [SerializeField] private TextMeshProUGUI originText;
     
     private bool isDebugMode = false;
+    private float nextUpdateTime;
+    private string lastText;
 
     private void Awake()
     {
@@ -42,14 +44,21 @@ public class DebugOverlay : MonoBehaviour
 
     private void Update()
     {
-        if (isDebugMode && originText != null && LocationResolver.Instance != null && LocationResolver.Instance.IsCalibrated())
+        if (!isDebugMode || Time.unscaledTime < nextUpdateTime) return;
+        nextUpdateTime = Time.unscaledTime + 0.5f;
+        if (originText != null && LocationResolver.Instance != null && LocationResolver.Instance.IsCalibrated())
         {
             var gps = LocationResolver.Instance.GetOriginGps();
             var unity = LocationResolver.Instance.GetOriginUnity();
             var heading = LocationResolver.Instance.GetNorthYRotationOffset();
-            originText.text = $"Origin GPS: {gps.latitude:F6}, {gps.longitude:F6}, {gps.altitude:F1}m\n" +
-                              $"Origin SLAM: {unity.x:F2}, {unity.y:F2}, {unity.z:F2}\n" +
-                              $"Estimated North Heading: {heading:F1}°";
+            string value = $"Origin GPS: {gps.latitude:F6}, {gps.longitude:F6}, {gps.altitude:F1}m\n" +
+                           $"Origin SLAM: {unity.x:F2}, {unity.y:F2}, {unity.z:F2}\n" +
+                           $"Estimated North Heading: {heading:F1}°";
+            if (lastText != value)
+            {
+                lastText = value;
+                originText.text = value;
+            }
         }
     }
 }

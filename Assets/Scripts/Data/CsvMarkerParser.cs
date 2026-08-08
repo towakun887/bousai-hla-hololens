@@ -6,6 +6,14 @@ using System.Collections.Generic;
 
 public class CsvMarkerParser : MonoBehaviour
 {
+    [SerializeField] private bool verboseDevelopmentLogs;
+    [Header("Editor Mock")]
+    [SerializeField] private bool useMockInEditor;
+    [SerializeField] private MockMarkerCount mockMarkerCount = MockMarkerCount.Thirty;
+    [SerializeField] private bool mockIncludesPhotos;
+    [SerializeField] private string mockImageFileId;
+
+    private enum MockMarkerCount { Zero = 0, Ten = 10, Thirty = 30, OneHundred = 100 }
     [SerializeField]
     private string csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSi8T3T1vmz4eQBrMOxWXYljtujKaNYg0IYOZI_fZxhH-l0diNpJfX2cjwjAVbVWds9g_d3_Y2iQfC9/pub?gid=1057226757&single=true&output=csv";
 
@@ -14,6 +22,13 @@ public class CsvMarkerParser : MonoBehaviour
 
     public void LoadCsv()
     {
+#if UNITY_EDITOR
+        if (useMockInEditor)
+        {
+            OnCsvParsed?.Invoke(CreateMockMarkers((int)mockMarkerCount));
+            return;
+        }
+#endif
         StartCoroutine(DownloadAndParseCsvCoroutine());
     }
 
@@ -36,9 +51,8 @@ public class CsvMarkerParser : MonoBehaviour
             }
 
             string csvText = www.downloadHandler.text;
-            Debug.Log($"[CSV] Downloaded CSV Data:\n{csvText}");
             List<MarkerData> markers = ParseCsv(csvText);
-            Debug.Log($"[CSV] Successfully parsed {markers.Count} markers.");
+            LogVerbose($"[CSV] Successfully parsed {markers.Count} markers.");
             OnCsvParsed?.Invoke(markers);
         }
     }
@@ -144,5 +158,44 @@ public class CsvMarkerParser : MonoBehaviour
         result.Add(currentValue);
 
         return result.ToArray();
+    }
+
+    private List<MarkerData> CreateMockMarkers(int count)
+    {
+        List<MarkerData> result = new List<MarkerData>(count);
+        double originLatitude = 35.6895;
+        double originLongitude = 139.6917;
+        if (LocationResolver.Instance != null && LocationResolver.Instance.IsCalibrated())
+        {
+            LocationData origin = LocationResolver.Instance.GetOriginGps();
+            originLatitude = origin.latitude;
+            originLongitude = origin.longitude;
+        }
+        for (int i = 0; i < count; i++)
+        {
+            float distance = 20f + i * 4f;
+            double latitudeOffset = distance / 111320.0;
+            bool photo = mockIncludesPhotos && i % 3 == 0;
+            result.Add(new MarkerData
+            {
+                serializedTime = "2026-08-05 12:00:00",
+                markerKind = i % 5 == 0 ? "Warning" : "Info",
+                title = $"Mock Marker {i + 1}",
+                detail = $"Performance test marker at approximately {distance:F0}m",
+                latitude = originLatitude + latitudeOffset,
+                longitude = originLongitude,
+                altitude = 0,
+                eunRotation = Quaternion.identity,
+                mediaType = photo ? "photo" : string.Empty,
+                fileId = photo ? mockImageFileId : string.Empty
+            });
+        }
+        return result;
+    }
+
+    [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private void LogVerbose(string message)
+    {
+        if (verboseDevelopmentLogs && Debug.isDebugBuild) Debug.Log(message);
     }
 }

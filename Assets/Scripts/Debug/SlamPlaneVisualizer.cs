@@ -9,8 +9,15 @@ public class SlamPlaneVisualizer : MonoBehaviour
     [SerializeField] private ARPlaneManager planeManager;
     [SerializeField] private Material horizontalMaterial;
     [SerializeField] private Material verticalMaterial;
+    [SerializeField] private bool logDevelopmentDiagnostics = true;
 
     private bool isVisible = false;
+    private int addedThisSecond;
+    private int updatedThisSecond;
+    private int removedThisSecond;
+    private float nextDiagnosticTime;
+
+    public bool DevelopmentDiagnosticsEnabled => logDevelopmentDiagnostics;
 
     private void Awake()
     {
@@ -25,7 +32,7 @@ public class SlamPlaneVisualizer : MonoBehaviour
 
         if (planeManager != null)
         {
-            planeManager.planesChanged += OnPlanesChanged;
+            planeManager.trackablesChanged.AddListener(OnPlanesChanged);
         }
     }
 
@@ -35,9 +42,11 @@ public class SlamPlaneVisualizer : MonoBehaviour
         UpdateAllPlanesVisibility();
     }
 
-    private void OnPlanesChanged(ARPlanesChangedEventArgs args)
+    private void OnPlanesChanged(ARTrackablesChangedEventArgs<ARPlane> args)
     {
-        if (!isVisible) return;
+        addedThisSecond += args.added.Count;
+        updatedThisSecond += args.updated.Count;
+        removedThisSecond += args.removed.Count;
 
         foreach (var plane in args.added)
         {
@@ -47,6 +56,20 @@ public class SlamPlaneVisualizer : MonoBehaviour
         {
             ApplyMaterial(plane);
         }
+    }
+
+    private void Update()
+    {
+#if DEVELOPMENT_BUILD
+        if (!logDevelopmentDiagnostics || Time.unscaledTime < nextDiagnosticTime) return;
+        nextDiagnosticTime = Time.unscaledTime + 1f;
+        int trackableCount = planeManager != null ? planeManager.trackables.count : 0;
+        bool hasSubsystem = planeManager != null && planeManager.subsystem != null;
+        Debug.Log($"[PlaneDiagnostics] subsystem={hasSubsystem}, trackables={trackableCount}, added/s={addedThisSecond}, updated/s={updatedThisSecond}, removed/s={removedThisSecond}");
+        addedThisSecond = 0;
+        updatedThisSecond = 0;
+        removedThisSecond = 0;
+#endif
     }
 
     private void ApplyMaterial(ARPlane plane)
@@ -68,6 +91,12 @@ public class SlamPlaneVisualizer : MonoBehaviour
                 }
             }
         }
+    }
+
+    private void OnDestroy()
+    {
+        if (planeManager != null) planeManager.trackablesChanged.RemoveListener(OnPlanesChanged);
+        if (Instance == this) Instance = null;
     }
 
     private void UpdateAllPlanesVisibility()

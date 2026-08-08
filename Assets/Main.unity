@@ -139,6 +139,7 @@ MonoBehaviour:
   planeManager: {fileID: 0}
   horizontalMaterial: {fileID: 0}
   verticalMaterial: {fileID: 0}
+  logDevelopmentDiagnostics: 1
 --- !u!114 &180885415
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1715,6 +1716,7 @@ GameObject:
   - component: {fileID: 744074765}
   - component: {fileID: 744074764}
   - component: {fileID: 744074774}
+  - component: {fileID: 744074775}
   m_Layer: 0
   m_Name: AppManager
   m_TagString: Untagged
@@ -1747,6 +1749,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea49e807b9b6a0a428b95c201c0e09b1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  maxConcurrentDownloads: 2
+  maxTextureDimension: 1024
+  cacheSizeMegabytes: 96
+  maxRetries: 2
+  retryBaseDelay: 0.5
 --- !u!114 &744074767
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1761,6 +1768,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   markerPrefab: {fileID: 199480819053260015, guid: 20f3d91b5966dde448e77915e958ef44, type: 3}
   csvParser: {fileID: 744074772}
+  lodInterval: 0.1
+  fullEnterDistance: 95
+  fullExitDistance: 105
+  visibleEnterDistance: 290
+  visibleExitDistance: 310
 --- !u!114 &744074768
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1804,6 +1816,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 61344254db510e449aaae7af759609ec, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  notificationInterval: 0.1
+  lostGracePeriod: 0.5
   useMockInEditor: 0
   mockIp: 127.0.0.1
   mockPort: 5000
@@ -1820,6 +1834,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 41f8f417d39ed6b438e8cc99914fba47, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  maxMainThreadActionsPerFrame: 8
+  requestIntervalSeconds: 0.5
+  maxReconnectDelaySeconds: 8
+  verboseDevelopmentLogs: 0
 --- !u!114 &744074772
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1832,6 +1850,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8eaaff1b12e45274581066263559309f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  verboseDevelopmentLogs: 1
+  useMockInEditor: 0
+  mockMarkerCount: 30
+  mockIncludesPhotos: 0
+  mockImageFileId: 
   csvUrl: https://docs.google.com/spreadsheets/d/e/2PACX-1vSi8T3T1vmz4eQBrMOxWXYljtujKaNYg0IYOZI_fZxhH-l0diNpJfX2cjwjAVbVWds9g_d3_Y2iQfC9/pub?gid=1057226757&single=true&output=csv
 --- !u!4 &744074773
 Transform:
@@ -1870,6 +1893,20 @@ MonoBehaviour:
   colorConnect: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   colorGps: {r: 0, g: 1, b: 1, a: 1}
   colorDone: {r: 0, g: 1, b: 0, a: 1}
+--- !u!114 &744074775
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 744074763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 722f9a621d1c4574af7b47821708e34c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  logSummary: 0
+  logInterval: 5
 --- !u!1 &815195552
 GameObject:
   m_ObjectHideFlags: 0
@@ -2812,7 +2849,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 404949538145338360, guid: acbf65a81ce2cf94f82a0809298acf70, type: 3}
       propertyPath: transparentDisplay.farPlaneDistance
-      value: 1000
+      value: 400
       objectReference: {fileID: 0}
     - target: {fileID: 2351505566771328527, guid: acbf65a81ce2cf94f82a0809298acf70, type: 3}
       propertyPath: m_ClearFlags
@@ -2820,7 +2857,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2351505566771328527, guid: acbf65a81ce2cf94f82a0809298acf70, type: 3}
       propertyPath: far clip plane
-      value: 1000
+      value: 400
       objectReference: {fileID: 0}
     - target: {fileID: 2351505566771328527, guid: acbf65a81ce2cf94f82a0809298acf70, type: 3}
       propertyPath: near clip plane
@@ -6522,12 +6559,48 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 622822711798153935, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 167.3
+      objectReference: {fileID: 0}
+    - target: {fileID: 622822711798153935, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
       propertyPath: m_AnchoredPosition.x
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 622822711798153935, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
       propertyPath: m_AnchoredPosition.y
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2523435386712495322, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 455.54114
+      objectReference: {fileID: 0}
+    - target: {fileID: 2523435386712495322, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 373.65515
+      objectReference: {fileID: 0}
+    - target: {fileID: 2523435386712495322, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0.00113
+      objectReference: {fileID: 0}
+    - target: {fileID: 2523435386712495322, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0.00029
+      objectReference: {fileID: 0}
+    - target: {fileID: 2972540703290458435, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.09263777
+      objectReference: {fileID: 0}
+    - target: {fileID: 2972540703290458435, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.075383656
+      objectReference: {fileID: 0}
+    - target: {fileID: 2972540703290458435, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.00092
+      objectReference: {fileID: 0}
+    - target: {fileID: 2972540703290458435, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.00043
       objectReference: {fileID: 0}
     - target: {fileID: 3335005998435784045, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
       propertyPath: m_AnchorMax.y
@@ -6536,6 +6609,14 @@ PrefabInstance:
     - target: {fileID: 3335005998435784045, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
       propertyPath: m_AnchorMin.y
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3335005998435784045, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 346.8
+      objectReference: {fileID: 0}
+    - target: {fileID: 3335005998435784045, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 110.56
       objectReference: {fileID: 0}
     - target: {fileID: 3335005998435784045, guid: 50bb198c38ac9f04791e647870e0942e, type: 3}
       propertyPath: m_AnchoredPosition.x

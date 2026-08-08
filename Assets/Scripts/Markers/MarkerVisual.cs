@@ -1,9 +1,16 @@
-using UnityEngine;
 using TMPro;
+using UnityEngine;
 using UnityEngine.UI;
 
 public class MarkerVisual : MonoBehaviour
 {
+    public enum LodState
+    {
+        Hidden,
+        Text,
+        Full
+    }
+
     [Header("UI References")]
     [SerializeField] private TextMeshProUGUI timeText;
     [SerializeField] private TextMeshProUGUI kindText;
@@ -15,7 +22,7 @@ public class MarkerVisual : MonoBehaviour
     [SerializeField] private TextMeshProUGUI errorText;
     [SerializeField] private TextMeshProUGUI errorDetailText;
     [SerializeField] private GameObject imageContainer;
-    
+
     [Header("Debug UI")]
     [SerializeField] private GameObject debugPanel;
     [SerializeField] private TextMeshProUGUI debugGpsText;
@@ -24,130 +31,204 @@ public class MarkerVisual : MonoBehaviour
     [Header("Visuals")]
     [SerializeField] private MeshRenderer pinRenderer;
     [SerializeField] private Color normalColor = Color.blue;
-    [SerializeField] private Color warningColor = new Color(1f, 0.5f, 0f); // Orange
+    [SerializeField] private Color warningColor = new Color(1f, 0.5f, 0f);
+
+    private static readonly int ColorId = Shader.PropertyToID("_BaseColor");
+    private static readonly int LegacyColorId = Shader.PropertyToID("_Color");
+    private static readonly float ScaleExponent = Mathf.Log((100f / 3f) / 2f) / Mathf.Log(100f / 3f);
+    private static readonly float ScaleFactor = 2f / Mathf.Pow(3f, ScaleExponent);
+
+    private MaterialPropertyBlock propertyBlock;
+    private GoogleDriveImageLoader.ImageRequest imageRequest;
+    private LodState lod = LodState.Hidden;
+    private bool debugEnabled;
+    private int setupVersion;
+    private float nextTextUpdateTime;
+    private float nextDebugUpdateTime;
 
     public MarkerData Data { get; private set; }
-    private Camera mainCamera;
-    private float distUpdateTimer = 0f;
+    public LodState CurrentLod => lod;
 
-    private void Start()
+    private void Awake()
     {
-        mainCamera = Camera.main;
-
-        // 背景のQuad（pinRenderer等）とテキストが全く同じZ座標にあると
-        // Zファイティング（斜めに切れるバグ）が起きるため、Canvasをわずかに手前(Zマイナス方向)にずらす
-        Canvas canvas = GetComponentInChildren<Canvas>();
+        propertyBlock = new MaterialPropertyBlock();
+        Canvas canvas = GetComponentInChildren<Canvas>(true);
         if (canvas != null)
         {
-            canvas.transform.localPosition += new Vector3(0, 0, -0.01f);
+            canvas.transform.localPosition += new Vector3(0f, 0f, -0.01f);
         }
     }
 
     public void Setup(MarkerData data)
     {
+        setupVersion++;
+        CancelImageRequest();
         Data = data;
-        
-        if (timeText) timeText.text = data.serializedTime;
-        if (kindText) kindText.text = data.markerKind;
-        if (titleText) titleText.text = string.IsNullOrEmpty(data.title) ? "<i>No Title<i>" : data.title;
-        if (detailText) detailText.text = string.IsNullOrEmpty(data.detail) ? "<color=#888888>説明はありません</color>" : data.detail;
 
-        if (pinRenderer)
+        SetTextIfChanged(timeText, data.serializedTime);
+        SetTextIfChanged(kindText, data.markerKind);
+        SetTextIfChanged(titleText, string.IsNullOrEmpty(data.title) ? "<i>No Title</i>" : data.title);
+        SetTextIfChanged(detailText, string.IsNullOrEmpty(data.detail) ? "<color=#888888>説明はありません</color>" : data.detail);
+        SetTextIfChanged(debugGpsText, $"GPS: {data.latitude:F6}, {data.longitude:F6}, {data.altitude:F1}m");
+
+        if (pinRenderer != null)
         {
-            pinRenderer.material.color = data.markerKind == "Warning" ? warningColor : normalColor;
+            pinRenderer.GetPropertyBlock(propertyBlock);
+            propertyBlock.SetColor(ColorId, data.markerKind == "Warning" ? warningColor : normalColor);
+            propertyBlock.SetColor(LegacyColorId, data.markerKind == "Warning" ? warningColor : normalColor);
+            pinRenderer.SetPropertyBlock(propertyBlock);
         }
 
-        if (debugPanel) debugPanel.SetActive(false); // default off
-        if (debugGpsText) debugGpsText.text = $"GPS: {data.latitude:F6}, {data.longitude:F6}, {data.altitude:F1}m";
-        if (debugSlamText) debugSlamText.text = $"SLAM: {transform.position.x:F2}, {transform.position.y:F2}, {transform.position.z:F2}";
-
-        if (markerImage)
+        if (markerImage != null)
         {
             markerImage.texture = null;
-            markerImage.gameObject.SetActive(true);
         }
-        if (errorOverlay) errorOverlay.SetActive(false);
-        if (imageContainer) imageContainer.SetActive(true);
-
-        bool isPhoto = data.mediaType == "photo";
-
-        if (!isPhoto)
+        if (errorOverlay != null)
         {
-            // photo以外の場合は画像コンテナごと非表示にする
-            if (imageContainer) imageContainer.SetActive(false);
-            if (markerImage) markerImage.gameObject.SetActive(false);
-            if (errorOverlay) errorOverlay.SetActive(false);
+            errorOverlay.SetActive(false);
         }
-        else if (!string.IsNullOrEmpty(data.fileId))
+        SetDebugMode(debugEnabled);
+    }
+
+    public void SetLod(LodState state)
+    {
+        if (lod == state)
         {
-            if (GoogleDriveImageLoader.Instance != null)
+            return;
+        }
+        lod = state;
+        if (debugPanel != null)
+        {
+            debugPanel.SetActive(debugEnabled && state != LodState.Hidden);
+        }
+
+        bool full = state == LodState.Full;
+        bool hasPhoto = Data != null && Data.mediaType == "photo" && !string.IsNullOrEmpty(Data.fileId);
+        if (imageContainer != null)
+        {
+            imageContainer.SetActive(full && hasPhoto);
+        }
+        if (markerImage != null)
+        {
+            markerImage.gameObject.SetActive(full && hasPhoto);
+        }
+
+        if (!full)
+        {
+            CancelImageRequest();
+            if (markerImage != null)
             {
-                GoogleDriveImageLoader.Instance.LoadImage(data.fileId,
-                    onSuccess: (tex) => {
-                        if (markerImage)
-                        {
-                            markerImage.texture = tex;
-                        }
-                    },
-                    onError: (err) => {
-                        if (errorOverlay)
-                        {
-                            errorOverlay.SetActive(true);
-                        }
-                        if (errorDetailText)
-                        {
-                            errorDetailText.text = err;
-                        }
-                    }
-                );
+                markerImage.texture = null;
             }
+            if (errorOverlay != null)
+            {
+                errorOverlay.SetActive(false);
+            }
+        }
+        else if (hasPhoto)
+        {
+            RequestImage();
+        }
+    }
+
+    public void UpdateDistanceAndScale(float distance)
+    {
+        distance = Mathf.Max(distance, 0.1f);
+        float scale = Mathf.Clamp(ScaleFactor * Mathf.Pow(distance, ScaleExponent), 0.2f, 500f);
+        transform.localScale = new Vector3(scale, scale, scale);
+        if (distanceText != null && Time.unscaledTime >= nextTextUpdateTime)
+        {
+            nextTextUpdateTime = Time.unscaledTime + 0.5f;
+            distanceText.SetText("{0:0.0}m", distance);
+        }
+    }
+
+    public void UpdateDebugPosition(Vector3 position)
+    {
+        if (debugEnabled && debugSlamText != null && Time.unscaledTime >= nextDebugUpdateTime)
+        {
+            nextDebugUpdateTime = Time.unscaledTime + 0.5f;
+            debugSlamText.SetText("SLAM: {0:0.00}, {1:0.00}, {2:0.00}", position.x, position.y, position.z);
+        }
+    }
+
+    public void FaceCamera(Transform cameraTransform)
+    {
+        Vector3 direction = cameraTransform.position - transform.position;
+        direction.y = 0f;
+        if (direction.sqrMagnitude > 0.001f)
+        {
+            transform.rotation = Quaternion.LookRotation(-direction);
         }
     }
 
     public void SetDebugMode(bool isDebug)
     {
-        if (debugPanel) debugPanel.SetActive(isDebug);
+        debugEnabled = isDebug;
+        if (debugPanel != null)
+        {
+            debugPanel.SetActive(isDebug && lod != LodState.Hidden);
+        }
     }
 
-    private void Update()
+    public void PrepareForPool()
     {
-        if (mainCamera != null)
+        setupVersion++;
+        CancelImageRequest();
+        if (markerImage != null)
         {
-            // 距離に応じたスケール変更
-            // 【要件】
-            // 1. 3m地点での実際のScaleは 2.0
-            // 2. 100m地点での「見た目の大きさ」が、3m地点でScale 1.0を置いた時と同じになるようにする
-            //    (見た目は Scale / 距離 に比例。つまり100mでのScaleは 100/3 = 33.333...)
-            float dist = Vector3.Distance(transform.position, mainCamera.transform.position);
-            dist = Mathf.Max(dist, 0.1f);
-
-            // S(d) = A * d^B のカーブを事前計算 (本来は定数ですが分かりやすさのため記載)
-            float d1 = 3.0f, s1 = 2.0f;
-            float d2 = 100.0f, s2 = 100.0f / 3.0f; 
-            float exponent = Mathf.Log(s2 / s1) / Mathf.Log(d2 / d1); // 約 0.802
-            float A = s1 / Mathf.Pow(d1, exponent); // 約 0.828
-
-            float scaleMultiplier = A * Mathf.Pow(dist, exponent);
-            
-            // 極端な縮小・拡大を防ぐクランプ (1000m地点ではScale約210になるため上限に余裕を持たせる)
-            scaleMultiplier = Mathf.Clamp(scaleMultiplier, 0.2f, 500f);
-            
-            transform.localScale = new Vector3(scaleMultiplier, scaleMultiplier, scaleMultiplier);
-
-            if (distanceText != null)
-            {
-                distUpdateTimer -= Time.deltaTime;
-                if (distUpdateTimer <= 0f)
-                {
-                    distanceText.text = $"{dist:F1}m";
-                    distUpdateTimer = 0.5f;
-                }
-            }
+            markerImage.texture = null;
         }
-        
-        if (debugPanel != null && debugPanel.activeSelf && debugSlamText != null)
+        if (errorOverlay != null)
         {
-            debugSlamText.text = $"SLAM: {transform.position.x:F2}, {transform.position.y:F2}, {transform.position.z:F2}";
+            errorOverlay.SetActive(false);
+        }
+        lod = LodState.Hidden;
+        Data = null;
+    }
+
+    private void RequestImage()
+    {
+        CancelImageRequest();
+        if (GoogleDriveImageLoader.Instance == null || Data == null)
+        {
+            return;
+        }
+
+        int version = setupVersion;
+        imageRequest = GoogleDriveImageLoader.Instance.LoadImage(Data.fileId,
+            texture =>
+            {
+                if (version == setupVersion && lod == LodState.Full && markerImage != null)
+                {
+                    markerImage.texture = texture;
+                }
+            },
+            error =>
+            {
+                if (version != setupVersion || lod != LodState.Full)
+                {
+                    return;
+                }
+                if (errorOverlay != null)
+                {
+                    errorOverlay.SetActive(true);
+                }
+                SetTextIfChanged(errorDetailText, error);
+            });
+    }
+
+    private void CancelImageRequest()
+    {
+        imageRequest?.Dispose();
+        imageRequest = null;
+    }
+
+    private static void SetTextIfChanged(TMP_Text target, string value)
+    {
+        if (target != null && target.text != value)
+        {
+            target.text = value;
         }
     }
 }
