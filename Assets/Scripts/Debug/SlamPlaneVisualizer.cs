@@ -32,7 +32,7 @@ public class SlamPlaneVisualizer : MonoBehaviour
 
         if (planeManager != null)
         {
-            planeManager.trackablesChanged.AddListener(OnPlanesChanged);
+            planeManager.planesChanged += OnPlanesChanged;
         }
     }
 
@@ -42,21 +42,18 @@ public class SlamPlaneVisualizer : MonoBehaviour
         UpdateAllPlanesVisibility();
     }
 
-    private void OnPlanesChanged(ARTrackablesChangedEventArgs<ARPlane> args)
+    private void OnPlanesChanged(ARPlanesChangedEventArgs args)
+{
+    foreach (var plane in args.added)
     {
-        addedThisSecond += args.added.Count;
-        updatedThisSecond += args.updated.Count;
-        removedThisSecond += args.removed.Count;
-
-        foreach (var plane in args.added)
-        {
-            ApplyMaterial(plane);
-        }
-        foreach (var plane in args.updated)
-        {
-            ApplyMaterial(plane);
-        }
+        ApplyMaterial(plane);
     }
+
+    foreach (var plane in args.updated)
+    {
+        ApplyMaterial(plane);
+    }
+}
 
     private void Update()
     {
@@ -94,10 +91,17 @@ public class SlamPlaneVisualizer : MonoBehaviour
     }
 
     private void OnDestroy()
+{
+    if (planeManager != null)
     {
-        if (planeManager != null) planeManager.trackablesChanged.RemoveListener(OnPlanesChanged);
-        if (Instance == this) Instance = null;
+        planeManager.planesChanged -= OnPlanesChanged;
     }
+
+    if (Instance == this)
+    {
+        Instance = null;
+    }
+}
 
     private void UpdateAllPlanesVisibility()
     {
