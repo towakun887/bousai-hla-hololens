@@ -122,74 +122,6 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &180885410 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 2351505567455720334, guid: acbf65a81ce2cf94f82a0809298acf70,
-    type: 3}
-  m_PrefabInstance: {fileID: 1264592401}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &180885414
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 180885410}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0e961640d80ce8046af2209744772148, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  planeManager: {fileID: 0}
-  horizontalMaterial: {fileID: 0}
-  verticalMaterial: {fileID: 0}
-  logDevelopmentDiagnostics: 1
---- !u!114 &180885415
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 180885410}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e1760703bbd54c04488a8d10600262ab, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_PlanePrefab: {fileID: 0}
-  m_DetectionMode: -1
---- !u!114 &180885416
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 180885410}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e0cb9aa70a22847b5925ee5f067c10a9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_Camera: {fileID: 0}
-  m_OriginBaseGameObject: {fileID: 180885410}
-  m_CameraFloorOffsetObject: {fileID: 0}
-  m_RequestedTrackingOriginMode: 0
-  m_CameraYOffset: 1.1176
---- !u!114 &180885420
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 180885410}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4df6e2a8f5c58cf4184b32d359111444, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  markerPrefab: {fileID: 0}
-  enabledMarkerTypes: 01000000
-  defaultTransformMode: 0
 --- !u!1 &189657679
 GameObject:
   m_ObjectHideFlags: 0
@@ -648,6 +580,57 @@ RectTransform:
     type: 3}
   m_PrefabInstance: {fileID: 306721473}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &308141086 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2351505566903569413, guid: acbf65a81ce2cf94f82a0809298acf70,
+    type: 3}
+  m_PrefabInstance: {fileID: 1264592401}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &308141090
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 308141086}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4df6e2a8f5c58cf4184b32d359111444, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  markerPrefab: {fileID: 0}
+  enabledMarkerTypes: 01000000
+  defaultTransformMode: 0
+--- !u!114 &308141091
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 308141086}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e961640d80ce8046af2209744772148, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  planeManager: {fileID: 308141092}
+  horizontalMaterial: {fileID: 0}
+  verticalMaterial: {fileID: 0}
+  logDevelopmentDiagnostics: 1
+--- !u!114 &308141092
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 308141086}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e1760703bbd54c04488a8d10600262ab, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_PlanePrefab: {fileID: 0}
+  m_DetectionMode: -1
 --- !u!1 &376177074
 GameObject:
   m_ObjectHideFlags: 0
@@ -1843,7 +1826,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   notificationInterval: 0.1
   lostGracePeriod: 0.5
-  useMockInEditor: 0
+  useMockInEditor: 1
   mockIp: 127.0.0.1
   mockPort: 5000
   mockDeviceId: MockDevice
@@ -3011,22 +2994,18 @@ PrefabInstance:
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 2351505567455720334, guid: acbf65a81ce2cf94f82a0809298acf70,
+    - targetCorrespondingSourceObject: {fileID: 2351505566903569413, guid: acbf65a81ce2cf94f82a0809298acf70,
         type: 3}
       insertIndex: -1
-      addedObject: {fileID: 180885416}
-    - targetCorrespondingSourceObject: {fileID: 2351505567455720334, guid: acbf65a81ce2cf94f82a0809298acf70,
+      addedObject: {fileID: 308141092}
+    - targetCorrespondingSourceObject: {fileID: 2351505566903569413, guid: acbf65a81ce2cf94f82a0809298acf70,
         type: 3}
       insertIndex: -1
-      addedObject: {fileID: 180885415}
-    - targetCorrespondingSourceObject: {fileID: 2351505567455720334, guid: acbf65a81ce2cf94f82a0809298acf70,
+      addedObject: {fileID: 308141091}
+    - targetCorrespondingSourceObject: {fileID: 2351505566903569413, guid: acbf65a81ce2cf94f82a0809298acf70,
         type: 3}
       insertIndex: -1
-      addedObject: {fileID: 180885414}
-    - targetCorrespondingSourceObject: {fileID: 2351505567455720334, guid: acbf65a81ce2cf94f82a0809298acf70,
-        type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 180885420}
+      addedObject: {fileID: 308141090}
     - targetCorrespondingSourceObject: {fileID: 2351505566771328562, guid: acbf65a81ce2cf94f82a0809298acf70,
         type: 3}
       insertIndex: -1

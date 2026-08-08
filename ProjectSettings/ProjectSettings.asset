@@ -932,10 +932,10 @@ PlayerSettings:
   apiCompatibilityLevel: 6
   activeInputHandler: 2
   windowsGamepadBackendHint: 0
-  cloudProjectId: 355a08ec-6498-41b6-901e-0907258acba0
+  cloudProjectId: e6b756d0-7775-4fb0-9a78-7c581fab006a
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: bousai-hla-hololens_migrated2022_URP
+  projectName: bousai-hla-hololens
   organizationId: towakun8888
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
