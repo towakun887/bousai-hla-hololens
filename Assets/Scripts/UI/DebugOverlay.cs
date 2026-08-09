@@ -10,6 +10,7 @@ public class DebugOverlay : MonoBehaviour
     private bool isDebugMode = false;
     private float nextUpdateTime;
     private string lastText;
+    private Transform trackedPose;
 
     private void Awake()
     {
@@ -46,19 +47,31 @@ public class DebugOverlay : MonoBehaviour
     {
         if (!isDebugMode || Time.unscaledTime < nextUpdateTime) return;
         nextUpdateTime = Time.unscaledTime + 0.5f;
-        if (originText != null && LocationResolver.Instance != null && LocationResolver.Instance.IsCalibrated())
+        if (originText == null)
+            return;
+
+        if (trackedPose == null && Camera.main != null)
+            trackedPose = Camera.main.transform;
+
+        string currentSlam = trackedPose != null
+            ? $"Current SLAM: {trackedPose.position.x:F2}, {trackedPose.position.y:F2}, {trackedPose.position.z:F2}m"
+            : "Current SLAM: N/A";
+        string value = $"{currentSlam}\nOrigin: N/A";
+        if (LocationResolver.Instance != null && LocationResolver.Instance.IsCalibrated())
         {
             var gps = LocationResolver.Instance.GetOriginGps();
             var unity = LocationResolver.Instance.GetOriginUnity();
             var heading = LocationResolver.Instance.GetNorthYRotationOffset();
-            string value = $"Origin GPS: {gps.latitude:F6}, {gps.longitude:F6}, {gps.altitude:F1}m\n" +
-                           $"Origin SLAM: {unity.x:F2}, {unity.y:F2}, {unity.z:F2}\n" +
-                           $"Estimated North Heading: {heading:F1}°";
-            if (lastText != value)
-            {
-                lastText = value;
-                originText.text = value;
-            }
+            value = $"{currentSlam}\n" +
+                    $"Origin GPS: {gps.latitude:F6}, {gps.longitude:F6}, {gps.altitude:F1}m\n" +
+                    $"Origin SLAM: {unity.x:F2}, {unity.y:F2}, {unity.z:F2}\n" +
+                    $"Estimated North Heading: {heading:F1}°";
+        }
+
+        if (lastText != value)
+        {
+            lastText = value;
+            originText.text = value;
         }
     }
 }

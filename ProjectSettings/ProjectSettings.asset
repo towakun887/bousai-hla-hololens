@@ -12,8 +12,8 @@ PlayerSettings:
   targetDevice: 2
   useOnDemandResources: 0
   accelerometerFrequency: 60
-  companyName: DefaultCompany
-  productName: bousai-hla-hololens_migrated2022_URP
+  companyName: net.sr.niwa
+  productName: bousai-hla-hololens
   defaultCursor: {fileID: 0}
   cursorHotspot: {x: 0, y: 0}
   m_SplashScreenBackgroundColor: {r: 0.13725491, g: 0.12156863, b: 0.1254902, a: 1}
@@ -846,14 +846,14 @@ PlayerSettings:
   apiCompatibilityLevelPerPlatform: {}
   m_RenderingPath: 1
   m_MobileRenderingPath: 1
-  metroPackageName: bousai-hla-hololensmigrated2022URP
+  metroPackageName: bousai-hla-hololens
   metroPackageVersion: 1.0.0.0
   metroCertificatePath: Assets/WSATestCertificate.pfx
-  metroCertificatePassword: 
-  metroCertificateSubject: DefaultCompany
-  metroCertificateIssuer: DefaultCompany
-  metroCertificateNotAfter: 00ce3c6b1846de01
-  metroApplicationDescription: bousai-hla-hololens_migrated2022_URP
+  metroCertificatePassword: Xc{m><<9
+  metroCertificateSubject: net.sr.niwa
+  metroCertificateIssuer: net.sr.niwa
+  metroCertificateNotAfter: 8039cadf2546de01
+  metroApplicationDescription: bousai-hla-hololens
   wsaImages: {}
   metroTileShortName: bousai-hla-hololens_migrated2022_URP
   metroTileShowName: 0
@@ -871,9 +871,9 @@ PlayerSettings:
   syncCapabilities: 0
   platformCapabilities:
     WindowsStoreApps:
-      GazeInput: False
+      GazeInput: True
       Location: True
-      PrivateNetworkClientServer: False
+      PrivateNetworkClientServer: True
       SpatialPerception: True
       InternetClient: True
       WebCam: True

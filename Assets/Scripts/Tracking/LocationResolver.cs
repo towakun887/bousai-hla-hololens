@@ -1,10 +1,13 @@
-using UnityEngine;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using Bousai.Flood;
+using UnityEngine;
 
 public class LocationResolver : MonoBehaviour
 {
     public static LocationResolver Instance { get; private set; }
+    public event Action CalibrationChanged;
 
     private bool isCalibrated = false;
     private LocationData originGps;
@@ -13,9 +16,6 @@ public class LocationResolver : MonoBehaviour
     // 北へのヨー角オフセット（度）
     private float northYRotationOffset = 0f;
     
-    // 緯度1度あたりのメートル (簡易)
-    private const double MetersPerDegreeLat = 111320.0;
-
     private void Awake()
     {
         if (Instance == null)
@@ -82,6 +82,7 @@ public class LocationResolver : MonoBehaviour
         }
         
         isCalibrated = true;
+        CalibrationChanged?.Invoke();
         
         Debug.Log($"Calibrated Origin GPS: {originGps.latitude}, {originGps.longitude}, {originGps.altitude}");
     }
@@ -91,6 +92,32 @@ public class LocationResolver : MonoBehaviour
         this.originGps = originGps;
         this.originUnity = originUnity;
         isCalibrated = true;
+        CalibrationChanged?.Invoke();
+    }
+
+    public void CalibrateOrigin(LocationData originGps, Vector3 originUnity, float northYRotationOffset)
+    {
+        this.originGps = originGps;
+        this.originUnity = originUnity;
+        this.northYRotationOffset = northYRotationOffset;
+        isCalibrated = true;
+        CalibrationChanged?.Invoke();
+        Debug.Log($"Calibrated Mock Origin GPS: {originGps.latitude}, {originGps.longitude}, {originGps.altitude}, northOffset={northYRotationOffset:F1}°");
+    }
+
+    public void CalibrateOrigin(List<LocationData> gpsSamples, Vector3 originUnity, float northYRotationOffset)
+    {
+        if (gpsSamples == null || gpsSamples.Count == 0)
+            return;
+
+        LocationData medianGps = new LocationData
+        {
+            latitude = GetMedian(gpsSamples.Select(s => s.latitude).OrderBy(v => v).ToList()),
+            longitude = GetMedian(gpsSamples.Select(s => s.longitude).OrderBy(v => v).ToList()),
+            altitude = GetMedian(gpsSamples.Select(s => s.altitude).OrderBy(v => v).ToList()),
+            isTracking = true
+        };
+        CalibrateOrigin(medianGps, originUnity, northYRotationOffset);
     }
 
     private double GetMedian(List<double> sortedList)
@@ -108,23 +135,44 @@ public class LocationResolver : MonoBehaviour
     {
         if (!isCalibrated) return Vector3.zero;
 
-        double deltaLat = latitude - originGps.latitude;
-        double deltaLon = longitude - originGps.longitude;
-        double deltaAlt = altitude - originGps.altitude;
+        return GeoCoordinateMath.GpsToUnity(
+            latitude, longitude, altitude,
+            originGps.latitude, originGps.longitude, originGps.altitude,
+            originUnity, northYRotationOffset);
+    }
 
-        double metersPerDegreeLon = MetersPerDegreeLat * Mathf.Cos((float)(originGps.latitude * Mathf.Deg2Rad));
+    public bool TryUnityToGps(Vector3 unityPosition, out LocationData location)
+    {
+        location = null;
+        if (!isCalibrated || originGps == null)
+            return false;
 
-        float offsetNorth = (float)(deltaLat * MetersPerDegreeLat);
-        float offsetEast = (float)(deltaLon * metersPerDegreeLon);
-        float offsetUp = (float)deltaAlt;
+        if (!GeoCoordinateMath.TryUnityToGps(
+                unityPosition,
+                originGps.latitude, originGps.longitude, originGps.altitude,
+                originUnity, northYRotationOffset,
+                out double latitude, out double longitude, out double altitude))
+            return false;
 
-        // GPSの差分から計算されたローカルオフセット (Zが北, Xが東, Yが上)
-        Vector3 localOffset = new Vector3(offsetEast, offsetUp, offsetNorth);
-        
-        // 算出された真北へのヨー角オフセットを適用して回転させる
-        Vector3 rotatedOffset = Quaternion.Euler(0, northYRotationOffset, 0) * localOffset;
-        
-        return originUnity + rotatedOffset;
+        location = new LocationData
+        {
+            isTracking = true,
+            latitude = latitude,
+            longitude = longitude,
+            altitude = altitude
+        };
+        return true;
+    }
+
+    public bool TryGetHeadingDegrees(Vector3 unityForward, out float headingDegrees)
+    {
+        if (!isCalibrated)
+        {
+            headingDegrees = 0f;
+            return false;
+        }
+
+        return GeoCoordinateMath.TryGetHeadingDegrees(unityForward, northYRotationOffset, out headingDegrees);
     }
 
     public bool IsCalibrated()

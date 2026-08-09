@@ -11,11 +11,6 @@ public class CalibrationManager : MonoBehaviour
     [SerializeField] private double accuracyThreshold = 3.0; // meters
     [SerializeField] private float timeoutSeconds = 60f;
 
-    [Header("Mock Location Settings")]
-    [SerializeField] private double mockLatitude = 35.6895;
-    [SerializeField] private double mockLongitude = 139.6917;
-    [SerializeField] private double mockAltitude = 0;
-
     public enum CalibrationState { WaitingForQR, Connecting, Collecting, Calibrated, Failed, DriftWarning }
     public CalibrationState CurrentState { get; private set; } = CalibrationState.WaitingForQR;
     public event Action StatusChanged;
@@ -65,6 +60,11 @@ public class CalibrationManager : MonoBehaviour
         }
         
         calibrationStartTime = Time.time;
+        if (IsFixedLocationMock)
+        {
+            ApplyFixedLocationMock();
+            return;
+        }
         StatusChanged?.Invoke();
     }
 
@@ -92,57 +92,6 @@ public class CalibrationManager : MonoBehaviour
 
         if (CurrentState == CalibrationState.WaitingForQR || CurrentState == CalibrationState.Failed || CurrentState == CalibrationState.DriftWarning)
         {
-            bool isMock = QRCodeTracker.Instance != null && QRCodeTracker.Instance.IsMockMode;
-            
-            if (isMock)
-            {
-                SetState(CalibrationState.Collecting);
-                
-                LocationData mockData = new LocationData
-                {
-                    isTracking = true,
-                    latitude = mockLatitude,
-                    longitude = mockLongitude,
-                    altitude = mockAltitude,
-                    accuracy = 1.0,
-                };
-
-                // Calculate eunRotation so that North (Z) aligns with the current Camera forward
-                if (mainCamera == null) mainCamera = Camera.main;
-                Vector3 targetNorthInPhoneLocal = Quaternion.Inverse(rot) * (mainCamera != null ? mainCamera.transform.forward : Vector3.forward);
-                targetNorthInPhoneLocal.y = 0; // flatten to horizontal plane
-                
-                if (targetNorthInPhoneLocal.sqrMagnitude > 0.001f)
-                {
-                    targetNorthInPhoneLocal.Normalize();
-                    // We want: Quaternion.Inverse(phoneEarthRot) * Vector3.forward = targetNorthInPhoneLocal
-                    Quaternion invPhoneEarthRot = Quaternion.LookRotation(targetNorthInPhoneLocal, Vector3.up);
-                    Quaternion phoneEarthRot = Quaternion.Inverse(invPhoneEarthRot);
-                    
-                    mockData.eunRotationX = phoneEarthRot.x;
-                    mockData.eunRotationY = phoneEarthRot.y;
-                    mockData.eunRotationZ = phoneEarthRot.z;
-                    mockData.eunRotationW = phoneEarthRot.w;
-                }
-                else
-                {
-                    mockData.eunRotationX = 0;
-                    mockData.eunRotationY = 0;
-                    mockData.eunRotationZ = 0;
-                    mockData.eunRotationW = 1;
-                }
-
-                // Inject mock samples
-                for (int i = 0; i < minSamplesRequired; i++)
-                {
-                    collectedSamples.Add(mockData);
-                }
-                NotifyStatusChanged();
-
-                CompleteCalibration();
-                return;
-            }
-
             calibrationStartTime = Time.time; // Reset timeout counter when QR is first found!
             SetState(CalibrationState.Connecting);
             TcpLocationClient.Instance.Connect(ip, port, deviceId);
@@ -162,8 +111,7 @@ public class CalibrationManager : MonoBehaviour
         }
         else if (CurrentState == CalibrationState.Calibrated)
         {
-            bool isMock = QRCodeTracker.Instance != null && QRCodeTracker.Instance.IsMockMode;
-            if (isMock) return; // MockModeでは再キャリブレーション処理を行わない
+            if (HasAnyLocationMock) return; // MockModeでは再キャリブレーション処理を行わない
 
             if (!isContinuousCalibrating)
             {
@@ -209,8 +157,7 @@ public class CalibrationManager : MonoBehaviour
                 }
             }
             
-            bool isMock = QRCodeTracker.Instance != null && QRCodeTracker.Instance.IsMockMode;
-            if (!isMock)
+            if (!IsFixedLocationMock)
             {
                 TcpLocationClient.Instance.Disconnect();
             }
@@ -355,14 +302,27 @@ public class CalibrationManager : MonoBehaviour
     {
         SetState(CalibrationState.Calibrated);
         
-        bool isMock = QRCodeTracker.Instance != null && QRCodeTracker.Instance.IsMockMode;
-        if (!isMock && !isQRVisible)
+        if (IsDirectConnectionMock)
+        {
+            TcpLocationClient.Instance?.Disconnect();
+        }
+        else if (!IsFixedLocationMock && !isQRVisible)
         {
             TcpLocationClient.Instance.Disconnect();
         }
         
-        // 保存したスマホの正確な検出位置と回転を渡す
-        LocationResolver.Instance.CalibrateOrigin(collectedSamples, lastDetectedPhonePosition, lastDetectedPhoneRotation);
+        if (IsDirectConnectionMock && MockModeSettings.Instance != null)
+        {
+            Vector3 connectionStartForward = lastDetectedPhoneRotation * Vector3.forward;
+            float northOffset = MockModeSettings.Instance.GetNorthYRotationOffset(
+                connectionStartForward, false);
+            LocationResolver.Instance.CalibrateOrigin(collectedSamples, lastDetectedPhonePosition, northOffset);
+        }
+        else
+        {
+            // 保存したスマホの正確な検出位置と回転を渡す
+            LocationResolver.Instance.CalibrateOrigin(collectedSamples, lastDetectedPhonePosition, lastDetectedPhoneRotation);
+        }
 
         if (PhoneVisualizer.Instance != null)
         {
@@ -391,8 +351,7 @@ public class CalibrationManager : MonoBehaviour
     {
         if (CurrentState == CalibrationState.Connecting || CurrentState == CalibrationState.Collecting)
         {
-            bool isMock = QRCodeTracker.Instance != null && QRCodeTracker.Instance.IsMockMode;
-            if (!isMock && Time.time - calibrationStartTime > timeoutSeconds)
+            if (!IsFixedLocationMock && Time.time - calibrationStartTime > timeoutSeconds)
             {
                 SetState(CalibrationState.Failed);
                 TcpLocationClient.Instance.Disconnect();
@@ -401,8 +360,48 @@ public class CalibrationManager : MonoBehaviour
         }
         else if (CurrentState == CalibrationState.Calibrated)
         {
-            TrackDrift();
+            if (!HasAnyLocationMock)
+                TrackDrift();
         }
+    }
+
+    private bool IsFixedLocationMock => MockModeSettings.Instance != null && MockModeSettings.Instance.UseFixedLocationMock;
+    private bool IsDirectConnectionMock => MockModeSettings.Instance != null && MockModeSettings.Instance.UseDirectConnectionMock;
+    private bool HasAnyLocationMock => MockModeSettings.Instance != null && MockModeSettings.Instance.HasAnyLocationMock;
+
+    private void ApplyFixedLocationMock()
+    {
+        MockModeSettings settings = MockModeSettings.Instance;
+        if (settings == null || LocationResolver.Instance == null)
+            return;
+
+        if (mainCamera == null)
+            mainCamera = Camera.main;
+        Vector3 originPosition = mainCamera != null ? mainCamera.transform.position : Vector3.zero;
+        float northOffset = settings.GetNorthYRotationOffset(mainCamera != null ? mainCamera.transform : null, true);
+        LocationData fixedLocation = new LocationData
+        {
+            isTracking = true,
+            latitude = settings.FixedLatitude,
+            longitude = settings.FixedLongitude,
+            altitude = settings.FixedAltitude,
+            accuracy = 0d,
+            eunRotationW = 1f
+        };
+
+        collectedSamples.Clear();
+        for (int i = 0; i < Mathf.Max(1, minSamplesRequired); i++)
+            collectedSamples.Add(fixedLocation);
+
+        lastDetectedPhonePosition = originPosition;
+        lastDetectedPhoneRotation = mainCamera != null ? mainCamera.transform.rotation : Quaternion.identity;
+        SetState(CalibrationState.Calibrated);
+        LocationResolver.Instance.CalibrateOrigin(fixedLocation, originPosition, northOffset);
+        MarkerManager.Instance?.GenerateMarkers();
+        lastCalibratedPos = originPosition;
+        accumulatedDistance = 0f;
+        timeSinceCalibrated = 0f;
+        NotifyStatusChanged();
     }
     
     private void TrackDrift()

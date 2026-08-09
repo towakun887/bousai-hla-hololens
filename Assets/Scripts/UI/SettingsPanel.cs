@@ -1,11 +1,20 @@
 using UnityEngine;
 using TMPro;
-using UnityEngine.UI;
 using MixedReality.Toolkit; // MRTK3
+using Bousai.Flood;
+using UnityEngine.Serialization;
 
 public class SettingsPanel : MonoBehaviour
 {
     [SerializeField] private StatefulInteractable debugToggle; // MRTK3のトグルボタンコンポーネント
+    [Header("Flood Display")]
+    [SerializeField] private StatefulInteractable floodDisplayToggle;
+    [FormerlySerializedAs("terrainElevationModeToggle")]
+    [Tooltip("ON: 国土地理院の標高JSONを使用 / OFF: 空間認識した地表面を使用")]
+    [SerializeField] private StatefulInteractable elevationModeToggle;
+    [SerializeField] private FloodDepthController floodController;
+
+    [Header("Data / Drift")]
     [SerializeField] private TMP_InputField csvUrlInput;
     [SerializeField] private TMP_InputField distanceThresholdInput;
     [SerializeField] private TMP_InputField timeThresholdInput;
@@ -19,6 +28,11 @@ public class SettingsPanel : MonoBehaviour
             parser = FindFirstObjectByType<CsvMarkerParser>();
         }
 
+        if (floodController == null)
+            floodController = FloodDepthController.Instance != null
+                ? FloodDepthController.Instance
+                : FindFirstObjectByType<FloodDepthController>();
+
         if (debugToggle != null)
         {
             // 初期状態を設定（イベントを発火させずに値をセット）
@@ -26,6 +40,8 @@ public class SettingsPanel : MonoBehaviour
             // MRTK3のクリックイベント（トグル切り替え時に発生）を購読
             debugToggle.OnClicked.AddListener(OnDebugToggleClicked);
         }
+
+        InitializeFloodSettings();
 
         if (csvUrlInput != null)
         {
@@ -45,6 +61,39 @@ public class SettingsPanel : MonoBehaviour
         }
     }
 
+    private void OnDestroy()
+    {
+        if (debugToggle != null)
+            debugToggle.OnClicked.RemoveListener(OnDebugToggleClicked);
+        if (floodDisplayToggle != null)
+            floodDisplayToggle.OnClicked.RemoveListener(OnFloodDisplayToggleClicked);
+        if (elevationModeToggle != null)
+            elevationModeToggle.OnClicked.RemoveListener(OnElevationModeClicked);
+    }
+
+    private void InitializeFloodSettings()
+    {
+        bool displayEnabled = PlayerPrefs.GetInt(
+            FloodDepthController.DisplayEnabledPreferenceKey, 1) == 1;
+        FloodHeightReferenceMode mode = (FloodHeightReferenceMode)Mathf.Clamp(
+            PlayerPrefs.GetInt(FloodDepthController.HeightReferenceModePreferenceKey, 0), 0, 1);
+
+        if (floodDisplayToggle != null)
+        {
+            floodDisplayToggle.ForceSetToggled(displayEnabled, false);
+            floodDisplayToggle.OnClicked.AddListener(OnFloodDisplayToggleClicked);
+        }
+        if (elevationModeToggle != null)
+        {
+            elevationModeToggle.ForceSetToggled(
+                mode == FloodHeightReferenceMode.TerrainElevation, false);
+            elevationModeToggle.OnClicked.AddListener(OnElevationModeClicked);
+        }
+
+        floodController?.SetFloodDisplayEnabled(displayEnabled);
+        floodController?.SetHeightReferenceMode(mode);
+    }
+
     private void OnDebugToggleClicked()
     {
         if (debugToggle != null && DebugOverlay.Instance != null)
@@ -52,6 +101,24 @@ public class SettingsPanel : MonoBehaviour
             // MRTK3トグルの IsToggled.Active プロパティから現在の状態を取得
             DebugOverlay.Instance.SetDebugMode(debugToggle.IsToggled.Active);
         }
+    }
+
+    private void OnFloodDisplayToggleClicked()
+    {
+        if (floodDisplayToggle == null)
+            return;
+        floodController?.SetFloodDisplayEnabled(floodDisplayToggle.IsToggled.Active);
+    }
+
+    private void OnElevationModeClicked()
+    {
+        if (elevationModeToggle == null)
+            return;
+
+        FloodHeightReferenceMode mode = elevationModeToggle.IsToggled.Active
+            ? FloodHeightReferenceMode.TerrainElevation
+            : FloodHeightReferenceMode.GroundSurface;
+        floodController?.SetHeightReferenceMode(mode);
     }
 
     public void OnApplySettingsClicked()

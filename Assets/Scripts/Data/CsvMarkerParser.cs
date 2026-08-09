@@ -7,13 +7,6 @@ using System.Collections.Generic;
 public class CsvMarkerParser : MonoBehaviour
 {
     [SerializeField] private bool verboseDevelopmentLogs;
-    [Header("Editor Mock")]
-    [SerializeField] private bool useMockInEditor;
-    [SerializeField] private MockMarkerCount mockMarkerCount = MockMarkerCount.Thirty;
-    [SerializeField] private bool mockIncludesPhotos;
-    [SerializeField] private string mockImageFileId;
-
-    private enum MockMarkerCount { Zero = 0, Ten = 10, Thirty = 30, OneHundred = 100 }
     [SerializeField]
     private string csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSi8T3T1vmz4eQBrMOxWXYljtujKaNYg0IYOZI_fZxhH-l0diNpJfX2cjwjAVbVWds9g_d3_Y2iQfC9/pub?gid=1057226757&single=true&output=csv";
 
@@ -22,13 +15,12 @@ public class CsvMarkerParser : MonoBehaviour
 
     public void LoadCsv()
     {
-#if UNITY_EDITOR
-        if (useMockInEditor)
+        MockModeSettings mockSettings = MockModeSettings.Instance;
+        if (mockSettings != null && mockSettings.UseCsvMarkerMock)
         {
-            OnCsvParsed?.Invoke(CreateMockMarkers((int)mockMarkerCount));
+            OnCsvParsed?.Invoke(CreateMockMarkers(mockSettings.MarkerCount));
             return;
         }
-#endif
         StartCoroutine(DownloadAndParseCsvCoroutine());
     }
 
@@ -162,6 +154,7 @@ public class CsvMarkerParser : MonoBehaviour
 
     private List<MarkerData> CreateMockMarkers(int count)
     {
+        MockModeSettings mockSettings = MockModeSettings.Instance;
         List<MarkerData> result = new List<MarkerData>(count);
         double originLatitude = 35.6895;
         double originLongitude = 139.6917;
@@ -175,7 +168,7 @@ public class CsvMarkerParser : MonoBehaviour
         {
             float distance = 20f + i * 4f;
             double latitudeOffset = distance / 111320.0;
-            bool photo = mockIncludesPhotos && i % 3 == 0;
+            bool photo = mockSettings != null && mockSettings.MarkerMockIncludesPhotos && i % 3 == 0;
             result.Add(new MarkerData
             {
                 serializedTime = "2026-08-05 12:00:00",
@@ -187,7 +180,7 @@ public class CsvMarkerParser : MonoBehaviour
                 altitude = 0,
                 eunRotation = Quaternion.identity,
                 mediaType = photo ? "photo" : string.Empty,
-                fileId = photo ? mockImageFileId : string.Empty
+                fileId = photo && mockSettings != null ? mockSettings.MarkerMockImageFileId : string.Empty
             });
         }
         return result;

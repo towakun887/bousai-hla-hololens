@@ -1,0 +1,21 @@
+{
+    "name": "Bousai.Flood.EditModeTests",
+    "rootNamespace": "Bousai.Flood.Tests",
+    "references": [
+        "Bousai.Flood.Core"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

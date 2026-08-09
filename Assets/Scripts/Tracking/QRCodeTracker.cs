@@ -16,12 +16,6 @@ public class QRCodeTracker : MonoBehaviour
     [SerializeField, Min(0.02f)] private float notificationInterval = 0.1f;
     [SerializeField, Min(0f)] private float lostGracePeriod = 0.5f;
 
-    [Header("Mock Settings")]
-    [SerializeField] private bool useMockInEditor;
-    [SerializeField] private string mockIp = "127.0.0.1";
-    [SerializeField] private int mockPort = 5000;
-    [SerializeField] private string mockDeviceId = "MockDevice";
-
     private enum TrackingPhase
     {
         Searching,
@@ -42,7 +36,8 @@ public class QRCodeTracker : MonoBehaviour
     private string currentDeviceId = string.Empty;
     private string debugStatus = "Initializing...";
 
-    public bool IsMockMode => useMockInEditor;
+    public bool IsMockMode => MockModeSettings.Instance != null && MockModeSettings.Instance.HasAnyLocationMock;
+    public bool IsDirectConnectionMock => MockModeSettings.Instance != null && MockModeSettings.Instance.UseDirectConnectionMock;
     public bool IsQRCodeLocated => phase == TrackingPhase.Tracking;
     public bool IsQRCodeDetected => currentActiveMarker != null || phase == TrackingPhase.Tracking || phase == TrackingPhase.TemporarilyLost;
     public string DebugStatus => debugStatus;
@@ -62,14 +57,19 @@ public class QRCodeTracker : MonoBehaviour
 
     private void Start()
     {
-#if UNITY_EDITOR
-        if (useMockInEditor)
+        MockModeSettings mockSettings = MockModeSettings.Instance;
+        if (mockSettings != null && mockSettings.UseFixedLocationMock)
         {
-            SetDebugStatus("Mock Mode (Editor)");
-            Invoke(nameof(SimulateQRDetect), 1f);
+            SetDebugStatus("Fixed location Mock: QR/TCP disabled");
             return;
         }
-#endif
+
+        if (mockSettings != null && mockSettings.UseDirectConnectionMock)
+        {
+            SetDebugStatus("Direct connection Mock: QR bypassed");
+            Invoke(nameof(SimulateQRDetect), 0.5f);
+            return;
+        }
 
         if (ARMarkerManager.Instance == null)
         {
@@ -98,20 +98,8 @@ public class QRCodeTracker : MonoBehaviour
 
     private void Update()
     {
-#if UNITY_EDITOR
-        if (useMockInEditor)
-        {
-            if (phase == TrackingPhase.Tracking)
-            {
-                NotifyTrackingIfDue(false);
-            }
-            else if (phase == TrackingPhase.TemporarilyLost)
-            {
-                UpdateTemporaryLoss();
-            }
+        if (IsMockMode)
             return;
-        }
-#endif
 
         if (currentActiveMarker == null)
         {
@@ -144,46 +132,38 @@ public class QRCodeTracker : MonoBehaviour
 
     public void SimulateQRDetect()
     {
-#if UNITY_EDITOR
-        if (!useMockInEditor)
-        {
+        MockModeSettings mockSettings = MockModeSettings.Instance;
+        if (mockSettings == null || !mockSettings.UseDirectConnectionMock)
             return;
-        }
 
         if (mainCamera == null)
         {
             mainCamera = Camera.main;
         }
-        lastValidPosition = mainCamera != null
-            ? mainCamera.transform.position + mainCamera.transform.forward
-            : Vector3.forward;
-        lastValidRotation = Quaternion.identity;
+        lastValidPosition = mainCamera != null ? mainCamera.transform.position : Vector3.zero;
+        lastValidRotation = mainCamera != null ? mainCamera.transform.rotation : Quaternion.identity;
+        currentIp = mockSettings.ConnectionIp;
+        currentPort = mockSettings.ConnectionPort;
+        currentDeviceId = mockSettings.ConnectionDeviceId;
         phase = TrackingPhase.Tracking;
-        SetDebugStatus("Mock QR tracking");
+        SetDebugStatus("Direct connection Mock active");
         NotifyTrackingIfDue(true);
-#endif
     }
 
     public void SimulateTemporaryTrackingLoss()
     {
-#if UNITY_EDITOR
-        if (useMockInEditor && phase == TrackingPhase.Tracking)
+        if (IsDirectConnectionMock && phase == TrackingPhase.Tracking)
         {
             phase = TrackingPhase.TemporarilyLost;
             temporarilyLostAt = Time.unscaledTime;
-            SetDebugStatus("Mock QR temporarily lost");
+            SetDebugStatus("Direct connection Mock temporarily lost");
         }
-#endif
     }
 
     public void SimulateQRLost()
     {
-#if UNITY_EDITOR
-        if (useMockInEditor)
-        {
-            EnterLost("Mock QR lost");
-        }
-#endif
+        if (IsDirectConnectionMock)
+            EnterLost("Direct connection Mock lost");
     }
 
     private void NotifyTrackingIfDue(bool force)
@@ -195,11 +175,12 @@ public class QRCodeTracker : MonoBehaviour
         }
 
         lastNotificationTime = now;
-        OnQRCodeDetected?.Invoke(currentIp.Length > 0 ? currentIp : mockIp,
-            currentIp.Length > 0 ? currentPort : mockPort,
-            currentDeviceId.Length > 0 ? currentDeviceId : mockDeviceId,
-            lastValidPosition,
-            lastValidRotation);
+        if (string.IsNullOrWhiteSpace(currentIp))
+            return;
+
+        OnQRCodeDetected?.Invoke(
+            currentIp, currentPort, currentDeviceId,
+            lastValidPosition, lastValidRotation);
     }
 
     private void UpdateTemporaryLoss()
@@ -246,6 +227,14 @@ public class QRCodeTracker : MonoBehaviour
     {
         if (marker.markerType != ARMarkerType.QRCode)
         {
+            return;
+        }
+
+        // Use the QR code's geometric center as the marker transform origin.
+        // The default MostStable mode may place the origin at a corner.
+        if (marker.transformMode != TransformMode.Center)
+        {
+            marker.transformMode = TransformMode.Center;
             return;
         }
 
