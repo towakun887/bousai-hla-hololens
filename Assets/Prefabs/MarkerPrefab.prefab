@@ -146,7 +146,7 @@ GameObject:
   - component: {fileID: 525007945367155229}
   - component: {fileID: 8118850020171363069}
   m_Layer: 0
-  m_Name: MarkerPrefab 1
+  m_Name: MarkerPrefab
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

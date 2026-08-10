@@ -848,7 +848,7 @@ PlayerSettings:
   m_MobileRenderingPath: 1
   metroPackageName: bousai-hla-hololens
   metroPackageVersion: 1.0.0.0
-  metroCertificatePath: Assets/WSATestCertificate.pfx
+  metroCertificatePath: Assets/Settings/WSATestCertificate.pfx
   metroCertificatePassword: Xc{m><<9
   metroCertificateSubject: net.sr.niwa
   metroCertificateIssuer: net.sr.niwa
