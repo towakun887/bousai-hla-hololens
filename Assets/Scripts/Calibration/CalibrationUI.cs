@@ -8,6 +8,7 @@ public class CalibrationUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI statusText;
     [SerializeField] private TextMeshProUGUI progressText;
     [SerializeField] private StatefulInteractable forceButton;
+    [SerializeField] private GameObject cesiumOsmBuildings;
 
     private void OnEnable()
     {
@@ -37,9 +38,19 @@ public class CalibrationUI : MonoBehaviour
         if (CalibrationManager.Instance == null) return;
         CalibrationManager.CalibrationState state = CalibrationManager.Instance.CurrentState;
         bool calibrated = state == CalibrationManager.CalibrationState.Calibrated;
-        if (panel != null && panel.activeSelf == calibrated)
-            panel.SetActive(!calibrated);
-        if (calibrated) return;
+        if (calibrated)
+        {
+            if (cesiumOsmBuildings != null && !cesiumOsmBuildings.activeSelf)
+                cesiumOsmBuildings.SetActive(true);
+            if (panel != null && panel.activeSelf)
+                panel.SetActive(false);
+            return;
+        }
+
+        if (cesiumOsmBuildings != null && cesiumOsmBuildings.activeSelf)
+            cesiumOsmBuildings.SetActive(false);
+        if (panel != null && !panel.activeSelf)
+            panel.SetActive(true);
 
         string status = state switch
         {

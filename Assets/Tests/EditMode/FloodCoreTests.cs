@@ -107,6 +107,26 @@ namespace Bousai.Flood.Tests
         }
 
         [Test]
+        public void TerrainElevationJson_ParsesGeoidHeight()
+        {
+            const string json =
+                "{\"OutputData\":{\"latitude\":\"35.389690000\",\"longitude\":\"139.433600000\",\"geoidHeight\":\"37.7172\",\"HeightReferenceConversion\":\"0.0000\",\"geoidHeight+HeightReferenceConversion\":\"37.7172\"}}";
+
+            Assert.IsTrue(TerrainElevationJsonParser.TryParseGeoidHeight(
+                json, out double geoidHeight));
+            Assert.AreEqual(37.7172d, geoidHeight, 0.00001d);
+        }
+
+        [Test]
+        public void TerrainElevation_AddsGeoidHeight()
+        {
+            double correctedElevation = TerrainElevationMath.AddGeoidHeight(
+                12.5d, 37.7172d);
+
+            Assert.AreEqual(50.2172d, correctedElevation, 0.00001d);
+        }
+
+        [Test]
         public void TerrainElevation_MapsRelativeAltitudeAndFloodDepthToUnityY()
         {
             float y = TerrainElevationMath.ToUnityY(

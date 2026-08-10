@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 [DefaultExecutionOrder(-1000)]
 public class MockModeSettings : MonoBehaviour
@@ -30,6 +31,13 @@ public class MockModeSettings : MonoBehaviour
     [SerializeField] private string connectionDeviceId = "MockDevice";
     [Tooltip("直接接続開始時にHoloLensが向いている方角です。0=北、90=東。")]
     [SerializeField, Range(0f, 360f)] private float connectionHeadingDegrees;
+    [FormerlySerializedAs("ignoreAccuracyAndContinuouslyUpdateOrigin")]
+    [InspectorName("位置精度を無視")]
+    [Tooltip("受信した有効な位置情報をaccuracyとisTrackingの値に関係なく使用します。")]
+    [SerializeField] private bool ignoreLocationAccuracy;
+    [InspectorName("キャリブレーション後もOriginを継続更新")]
+    [Tooltip("キャリブレーション完了後も接続を維持し、受信した位置情報でOriginを更新し続けます。")]
+    [SerializeField] private bool continuouslyUpdateOrigin;
 
     [Header("CSV Marker Mock")]
     [SerializeField] private bool useCsvMarkerMock;
@@ -52,6 +60,8 @@ public class MockModeSettings : MonoBehaviour
     public int ConnectionPort => connectionPort;
     public string ConnectionDeviceId => connectionDeviceId;
     public float ConnectionHeadingDegrees => connectionHeadingDegrees;
+    public bool IgnoreLocationAccuracy => UseDirectConnectionMock && ignoreLocationAccuracy;
+    public bool ContinuouslyUpdateOrigin => UseDirectConnectionMock && continuouslyUpdateOrigin;
     public bool UseCsvMarkerMock => useCsvMarkerMock;
     public int MarkerCount => (int)markerCount;
     public bool MarkerMockIncludesPhotos => markerMockIncludesPhotos;

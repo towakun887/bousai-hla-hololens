@@ -168,6 +168,18 @@ public class CalibrationManager : MonoBehaviour
 
     private void HandleLocationReceived(LocationData data)
     {
+        if (!IsUsableLocationSample(data))
+        {
+            if (PhoneVisualizer.Instance != null)
+            {
+                PhoneVisualizer.Instance.UpdateStatus(
+                    "接続中...",
+                    "GPS: 測位データ待機中",
+                    $"サンプル: {collectedSamples.Count}/{minSamplesRequired}");
+            }
+            return;
+        }
+
         if (CurrentState == CalibrationState.Connecting)
         {
             SetState(CalibrationState.Collecting);
@@ -178,8 +190,9 @@ public class CalibrationManager : MonoBehaviour
         {
             bool isStrictHighAccuracy = data.isTracking && data.accuracy > 0 && data.accuracy <= StrictAccuracyThreshold;
             bool isRelaxedAccuracy = data.isTracking && data.accuracy > 0 && data.accuracy <= RelaxedAccuracyThreshold;
+            bool ignoreAccuracy = ShouldIgnoreDirectConnectionAccuracy;
             
-            if (isRelaxedAccuracy || forceCalibration)
+            if (ignoreAccuracy || isRelaxedAccuracy || forceCalibration)
             {
                 collectedSamples.Add(data);
                 if (maxSamplesToCollect > 0 && collectedSamples.Count > maxSamplesToCollect)
@@ -187,7 +200,7 @@ public class CalibrationManager : MonoBehaviour
                     collectedSamples.RemoveAt(0);
                 }
                 NotifyStatusChanged();
-                if (isStrictHighAccuracy)
+                if (ignoreAccuracy || isStrictHighAccuracy)
                 {
                     strictSamplesCount++;
                 }
@@ -211,8 +224,9 @@ public class CalibrationManager : MonoBehaviour
         else if (CurrentState == CalibrationState.Calibrated && isContinuousCalibrating)
         {
             bool isStrictHighAccuracy = data.isTracking && data.accuracy > 0 && data.accuracy <= StrictAccuracyThreshold;
+            bool ignoreAccuracy = ShouldIgnoreDirectConnectionAccuracy;
             
-            if (isStrictHighAccuracy)
+            if (ignoreAccuracy || isStrictHighAccuracy)
             {
                 collectedSamples.Add(data);
                 if (collectedSamples.Count > minSamplesRequired)
@@ -300,9 +314,7 @@ public class CalibrationManager : MonoBehaviour
 
     private void CompleteCalibration()
     {
-        SetState(CalibrationState.Calibrated);
-        
-        if (IsDirectConnectionMock)
+        if (IsDirectConnectionMock && !ShouldContinuouslyUpdateDirectConnectionOrigin)
         {
             TcpLocationClient.Instance?.Disconnect();
         }
@@ -317,12 +329,16 @@ public class CalibrationManager : MonoBehaviour
             float northOffset = MockModeSettings.Instance.GetNorthYRotationOffset(
                 connectionStartForward, false);
             LocationResolver.Instance.CalibrateOrigin(collectedSamples, lastDetectedPhonePosition, northOffset);
+            isContinuousCalibrating = ShouldContinuouslyUpdateDirectConnectionOrigin;
         }
         else
         {
             // 保存したスマホの正確な検出位置と回転を渡す
             LocationResolver.Instance.CalibrateOrigin(collectedSamples, lastDetectedPhonePosition, lastDetectedPhoneRotation);
         }
+
+        // SLAM/Cesium原点が確定してから、UIへキャリブレーション完了を通知する。
+        SetState(CalibrationState.Calibrated);
 
         if (PhoneVisualizer.Instance != null)
         {
@@ -368,6 +384,26 @@ public class CalibrationManager : MonoBehaviour
     private bool IsFixedLocationMock => MockModeSettings.Instance != null && MockModeSettings.Instance.UseFixedLocationMock;
     private bool IsDirectConnectionMock => MockModeSettings.Instance != null && MockModeSettings.Instance.UseDirectConnectionMock;
     private bool HasAnyLocationMock => MockModeSettings.Instance != null && MockModeSettings.Instance.HasAnyLocationMock;
+    private bool ShouldIgnoreDirectConnectionAccuracy =>
+        MockModeSettings.Instance != null && MockModeSettings.Instance.IgnoreLocationAccuracy;
+    private bool ShouldContinuouslyUpdateDirectConnectionOrigin =>
+        MockModeSettings.Instance != null && MockModeSettings.Instance.ContinuouslyUpdateOrigin;
+
+    private static bool IsUsableLocationSample(LocationData data)
+    {
+        if (data == null ||
+            double.IsNaN(data.latitude) || double.IsInfinity(data.latitude) ||
+            double.IsNaN(data.longitude) || double.IsInfinity(data.longitude) ||
+            data.latitude < -90d || data.latitude > 90d ||
+            data.longitude < -180d || data.longitude > 180d)
+        {
+            return false;
+        }
+
+        // 未測位時に端末から送られる既定値。精度値やisTrackingは無視しても、
+        // 実座標ではない(0, 0)でOriginを上書きしてはいけない。
+        return Math.Abs(data.latitude) > 0.000001d || Math.Abs(data.longitude) > 0.000001d;
+    }
 
     private void ApplyFixedLocationMock()
     {
@@ -395,13 +431,12 @@ public class CalibrationManager : MonoBehaviour
 
         lastDetectedPhonePosition = originPosition;
         lastDetectedPhoneRotation = mainCamera != null ? mainCamera.transform.rotation : Quaternion.identity;
-        SetState(CalibrationState.Calibrated);
         LocationResolver.Instance.CalibrateOrigin(fixedLocation, originPosition, northOffset);
+        SetState(CalibrationState.Calibrated);
         MarkerManager.Instance?.GenerateMarkers();
         lastCalibratedPos = originPosition;
         accumulatedDistance = 0f;
         timeSinceCalibrated = 0f;
-        NotifyStatusChanged();
     }
     
     private void TrackDrift()
