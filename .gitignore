@@ -74,6 +74,8 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 /debug
-/refs
 .vsconfig
 /.plastic
+/Docs
+/Assets/Screenshots
+Assets/Screenshots.meta
