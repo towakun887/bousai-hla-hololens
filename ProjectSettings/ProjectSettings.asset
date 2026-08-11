@@ -849,10 +849,10 @@ PlayerSettings:
   metroPackageName: bousai-hla-hololens
   metroPackageVersion: 1.0.0.0
   metroCertificatePath: Assets/Settings/WSATestCertificate.pfx
-  metroCertificatePassword: Xc{m><<9
+  metroCertificatePassword: INVALID_UTF8_STRING
   metroCertificateSubject: net.sr.niwa
   metroCertificateIssuer: net.sr.niwa
-  metroCertificateNotAfter: 8039cadf2546de01
+  metroCertificateNotAfter: 0000000000000000
   metroApplicationDescription: bousai-hla-hololens
   wsaImages: {}
   metroTileShortName: bousai-hla-hololens_migrated2022_URP
@@ -869,14 +869,7 @@ PlayerSettings:
     a: 1}
   metroSplashScreenUseBackgroundColor: 0
   syncCapabilities: 0
-  platformCapabilities:
-    WindowsStoreApps:
-      GazeInput: True
-      Location: True
-      PrivateNetworkClientServer: True
-      SpatialPerception: True
-      InternetClient: True
-      WebCam: True
+  platformCapabilities: {}
   metroTargetDeviceFamilies:
     Holographic: True
     Mobile: False
@@ -938,7 +931,7 @@ PlayerSettings:
   projectName: bousai-hla-hololens
   organizationId: towakun8888
   cloudEnabled: 0
-  legacyClampBlendShapeWeights: 0
+  legacyClampBlendShapeWeights: 1
   hmiLoadingImage: {fileID: 0}
   platformRequiresReadableAssets: 0
   virtualTexturingSupportEnabled: 0

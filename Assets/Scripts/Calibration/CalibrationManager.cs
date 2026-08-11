@@ -247,7 +247,7 @@ public class CalibrationManager : MonoBehaviour
                 if (collectedSamples.Count >= minSamplesRequired)
                 {
                     // Trigger recalibration using the latest N samples and latest phone transform
-                    LocationResolver.Instance.CalibrateOrigin(collectedSamples, lastDetectedPhonePosition, lastDetectedPhoneRotation);
+                    CalibrateOriginFromCollectedSamples();
                     
                     if (MarkerManager.Instance != null)
                     {
@@ -323,19 +323,7 @@ public class CalibrationManager : MonoBehaviour
             TcpLocationClient.Instance.Disconnect();
         }
         
-        if (IsDirectConnectionMock && MockModeSettings.Instance != null)
-        {
-            Vector3 connectionStartForward = lastDetectedPhoneRotation * Vector3.forward;
-            float northOffset = MockModeSettings.Instance.GetNorthYRotationOffset(
-                connectionStartForward, false);
-            LocationResolver.Instance.CalibrateOrigin(collectedSamples, lastDetectedPhonePosition, northOffset);
-            isContinuousCalibrating = ShouldContinuouslyUpdateDirectConnectionOrigin;
-        }
-        else
-        {
-            // 保存したスマホの正確な検出位置と回転を渡す
-            LocationResolver.Instance.CalibrateOrigin(collectedSamples, lastDetectedPhonePosition, lastDetectedPhoneRotation);
-        }
+        CalibrateOriginFromCollectedSamples();
 
         // SLAM/Cesium原点が確定してから、UIへキャリブレーション完了を通知する。
         SetState(CalibrationState.Calibrated);
@@ -388,6 +376,37 @@ public class CalibrationManager : MonoBehaviour
         MockModeSettings.Instance != null && MockModeSettings.Instance.IgnoreLocationAccuracy;
     private bool ShouldContinuouslyUpdateDirectConnectionOrigin =>
         MockModeSettings.Instance != null && MockModeSettings.Instance.ContinuouslyUpdateOrigin;
+    private bool ShouldBypassQrRelativePose =>
+        !HasAnyLocationMock &&
+        QRCodeTracker.Instance != null &&
+        QRCodeTracker.Instance.BypassRelativePoseCalculation;
+
+    private void CalibrateOriginFromCollectedSamples()
+    {
+        if (LocationResolver.Instance == null)
+            return;
+
+        if (IsDirectConnectionMock && MockModeSettings.Instance != null)
+        {
+            Vector3 connectionStartForward = lastDetectedPhoneRotation * Vector3.forward;
+            float northOffset = MockModeSettings.Instance.GetNorthYRotationOffset(
+                connectionStartForward, false);
+            LocationResolver.Instance.CalibrateOrigin(
+                collectedSamples, lastDetectedPhonePosition, northOffset);
+            isContinuousCalibrating = ShouldContinuouslyUpdateDirectConnectionOrigin;
+            return;
+        }
+
+        if (ShouldBypassQrRelativePose)
+        {
+            // QR姿勢には依存せず、SLAMワールド原点と+Z方向を基準にする。
+            LocationResolver.Instance.CalibrateOrigin(collectedSamples, Vector3.zero, 0f);
+            return;
+        }
+
+        LocationResolver.Instance.CalibrateOrigin(
+            collectedSamples, lastDetectedPhonePosition, lastDetectedPhoneRotation);
+    }
 
     private static bool IsUsableLocationSample(LocationData data)
     {

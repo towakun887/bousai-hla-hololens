@@ -7,6 +7,15 @@ using UnityEngine.Serialization;
 public class SettingsPanel : MonoBehaviour
 {
     [SerializeField] private StatefulInteractable debugToggle; // MRTK3のトグルボタンコンポーネント
+
+    [Header("QR / Map Display")]
+    [Tooltip("ON: QRコードの相対位置・回転計算をバイパス")]
+    [SerializeField] private StatefulInteractable qrRelativePoseBypassToggle;
+    [SerializeField] private QRCodeTracker qrCodeTracker;
+    [Tooltip("ON: キャリブレーション完了後にOSM Buildingsを表示")]
+    [SerializeField] private StatefulInteractable osmBuildingsToggle;
+    [SerializeField] private CalibrationUI calibrationUI;
+
     [Header("Flood Display")]
     [SerializeField] private StatefulInteractable floodDisplayToggle;
     [FormerlySerializedAs("terrainElevationModeToggle")]
@@ -33,6 +42,13 @@ public class SettingsPanel : MonoBehaviour
                 ? FloodDepthController.Instance
                 : FindFirstObjectByType<FloodDepthController>();
 
+        if (qrCodeTracker == null)
+            qrCodeTracker = QRCodeTracker.Instance != null
+                ? QRCodeTracker.Instance
+                : FindFirstObjectByType<QRCodeTracker>();
+        if (calibrationUI == null)
+            calibrationUI = FindFirstObjectByType<CalibrationUI>();
+
         if (debugToggle != null)
         {
             // 初期状態を設定（イベントを発火させずに値をセット）
@@ -42,6 +58,7 @@ public class SettingsPanel : MonoBehaviour
         }
 
         InitializeFloodSettings();
+        InitializeQrAndMapSettings();
 
         if (csvUrlInput != null)
         {
@@ -65,6 +82,10 @@ public class SettingsPanel : MonoBehaviour
     {
         if (debugToggle != null)
             debugToggle.OnClicked.RemoveListener(OnDebugToggleClicked);
+        if (qrRelativePoseBypassToggle != null)
+            qrRelativePoseBypassToggle.OnClicked.RemoveListener(OnQrRelativePoseBypassClicked);
+        if (osmBuildingsToggle != null)
+            osmBuildingsToggle.OnClicked.RemoveListener(OnOsmBuildingsToggleClicked);
         if (floodDisplayToggle != null)
             floodDisplayToggle.OnClicked.RemoveListener(OnFloodDisplayToggleClicked);
         if (elevationModeToggle != null)
@@ -94,6 +115,30 @@ public class SettingsPanel : MonoBehaviour
         floodController?.SetHeightReferenceMode(mode);
     }
 
+    private void InitializeQrAndMapSettings()
+    {
+        bool bypassQrPose = qrCodeTracker != null
+            ? qrCodeTracker.BypassRelativePoseCalculation
+            : PlayerPrefs.GetInt(QRCodeTracker.RelativePoseBypassPreferenceKey, 0) == 1;
+        bool showOsmBuildings = calibrationUI != null
+            ? calibrationUI.OsmBuildingsVisible
+            : PlayerPrefs.GetInt(CalibrationUI.OsmBuildingsVisiblePreferenceKey, 1) == 1;
+
+        if (qrRelativePoseBypassToggle != null)
+        {
+            qrRelativePoseBypassToggle.ForceSetToggled(bypassQrPose, false);
+            qrRelativePoseBypassToggle.OnClicked.AddListener(OnQrRelativePoseBypassClicked);
+        }
+        if (osmBuildingsToggle != null)
+        {
+            osmBuildingsToggle.ForceSetToggled(showOsmBuildings, false);
+            osmBuildingsToggle.OnClicked.AddListener(OnOsmBuildingsToggleClicked);
+        }
+
+        qrCodeTracker?.SetRelativePoseCalculationBypassed(bypassQrPose);
+        calibrationUI?.SetOsmBuildingsVisible(showOsmBuildings);
+    }
+
     private void OnDebugToggleClicked()
     {
         if (debugToggle != null && DebugOverlay.Instance != null)
@@ -101,6 +146,28 @@ public class SettingsPanel : MonoBehaviour
             // MRTK3トグルの IsToggled.Active プロパティから現在の状態を取得
             DebugOverlay.Instance.SetDebugMode(debugToggle.IsToggled.Active);
         }
+    }
+
+    private void OnQrRelativePoseBypassClicked()
+    {
+        if (qrRelativePoseBypassToggle != null)
+            SetQrRelativePoseCalculationBypassed(qrRelativePoseBypassToggle.IsToggled.Active);
+    }
+
+    private void OnOsmBuildingsToggleClicked()
+    {
+        if (osmBuildingsToggle != null)
+            SetOsmBuildingsVisible(osmBuildingsToggle.IsToggled.Active);
+    }
+
+    public void SetQrRelativePoseCalculationBypassed(bool bypass)
+    {
+        qrCodeTracker?.SetRelativePoseCalculationBypassed(bypass);
+    }
+
+    public void SetOsmBuildingsVisible(bool visible)
+    {
+        calibrationUI?.SetOsmBuildingsVisible(visible);
     }
 
     private void OnFloodDisplayToggleClicked()

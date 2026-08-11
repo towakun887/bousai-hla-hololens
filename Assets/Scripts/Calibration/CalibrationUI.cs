@@ -4,11 +4,24 @@ using UnityEngine;
 
 public class CalibrationUI : MonoBehaviour
 {
+    public const string OsmBuildingsVisiblePreferenceKey = "OsmBuildingsVisible";
+
     [SerializeField] private GameObject panel;
     [SerializeField] private TextMeshProUGUI statusText;
     [SerializeField] private TextMeshProUGUI progressText;
     [SerializeField] private StatefulInteractable forceButton;
     [SerializeField] private GameObject cesiumOsmBuildings;
+    [Tooltip("キャリブレーション完了後にOSM Buildingsを表示します。")]
+    [SerializeField] private bool osmBuildingsVisible = true;
+
+    public bool OsmBuildingsVisible => osmBuildingsVisible;
+
+    private void Awake()
+    {
+        osmBuildingsVisible = PlayerPrefs.GetInt(
+            OsmBuildingsVisiblePreferenceKey,
+            osmBuildingsVisible ? 1 : 0) == 1;
+    }
 
     private void OnEnable()
     {
@@ -40,15 +53,13 @@ public class CalibrationUI : MonoBehaviour
         bool calibrated = state == CalibrationManager.CalibrationState.Calibrated;
         if (calibrated)
         {
-            if (cesiumOsmBuildings != null && !cesiumOsmBuildings.activeSelf)
-                cesiumOsmBuildings.SetActive(true);
+            ApplyOsmBuildingsVisibility(true);
             if (panel != null && panel.activeSelf)
                 panel.SetActive(false);
             return;
         }
 
-        if (cesiumOsmBuildings != null && cesiumOsmBuildings.activeSelf)
-            cesiumOsmBuildings.SetActive(false);
+        ApplyOsmBuildingsVisibility(false);
         if (panel != null && !panel.activeSelf)
             panel.SetActive(true);
 
@@ -72,5 +83,29 @@ public class CalibrationUI : MonoBehaviour
     public void OnForceCalibrationClicked()
     {
         CalibrationManager.Instance?.ForceCalibration();
+    }
+
+    /// <summary>
+    /// OSM Buildingsの表示設定を変更します。未キャリブレーション中は、
+    /// ONにしてもキャリブレーション完了まで非表示のままです。
+    /// </summary>
+    public void SetOsmBuildingsVisible(bool visible)
+    {
+        osmBuildingsVisible = visible;
+        PlayerPrefs.SetInt(OsmBuildingsVisiblePreferenceKey, visible ? 1 : 0);
+        PlayerPrefs.Save();
+        Refresh();
+    }
+
+    public void ToggleOsmBuildingsVisibility()
+    {
+        SetOsmBuildingsVisible(!osmBuildingsVisible);
+    }
+
+    private void ApplyOsmBuildingsVisibility(bool calibrated)
+    {
+        bool shouldBeActive = calibrated && osmBuildingsVisible;
+        if (cesiumOsmBuildings != null && cesiumOsmBuildings.activeSelf != shouldBeActive)
+            cesiumOsmBuildings.SetActive(shouldBeActive);
     }
 }
