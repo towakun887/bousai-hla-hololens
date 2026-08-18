@@ -869,7 +869,14 @@ PlayerSettings:
     a: 1}
   metroSplashScreenUseBackgroundColor: 0
   syncCapabilities: 0
-  platformCapabilities: {}
+  platformCapabilities:
+    WindowsStoreApps:
+      GazeInput: True
+      Location: True
+      PrivateNetworkClientServer: True
+      SpatialPerception: True
+      InternetClient: True
+      WebCam: True
   metroTargetDeviceFamilies:
     Holographic: True
     Mobile: False

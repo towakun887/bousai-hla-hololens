@@ -24,7 +24,7 @@ public class LocationResolver : MonoBehaviour
             Destroy(gameObject);
     }
 
-    public void CalibrateOrigin(List<LocationData> gpsSamples, Vector3 qrUnityPosition, Quaternion qrUnityRotation)
+    public void CalibrateOrigin(List<LocationData> gpsSamples, Vector3 qrUnityPosition, Quaternion cameraUnityRotation)
     {
         if (gpsSamples == null || gpsSamples.Count == 0) return;
 
@@ -56,24 +56,26 @@ public class LocationResolver : MonoBehaviour
             Vector3 phoneNorthInEarth = phoneEarthRot * Vector3.forward;
             phoneNorthInEarth.y = 0;
 
-            // qrUnityRotation のヨー成分のみ抽出
-            // HoloLens空間でのスマホ前方を水平投影
-            Vector3 qrForwardInUnity = qrUnityRotation * Vector3.forward;
-            qrForwardInUnity.y = 0;
+            // cameraUnityRotation のヨー成分のみ抽出
+            // HoloLens空間でのHoloLens前方を水平投影
+            Vector3 cameraForwardInUnity = cameraUnityRotation * Vector3.forward;
+            cameraForwardInUnity.y = 0;
 
-            if (phoneNorthInEarth.sqrMagnitude > 0.001f && qrForwardInUnity.sqrMagnitude > 0.001f)
+            if (phoneNorthInEarth.sqrMagnitude > 0.001f && cameraForwardInUnity.sqrMagnitude > 0.001f)
             {
                 phoneNorthInEarth.Normalize();
-                qrForwardInUnity.Normalize();
+                cameraForwardInUnity.Normalize();
 
                 // スマホが地球空間でどれだけヨーしているか（北=0°として）
                 float phoneYaw = Mathf.Atan2(phoneNorthInEarth.x, phoneNorthInEarth.z) * Mathf.Rad2Deg;
-                // HoloLens空間でのスマホ前方のヨー角
-                float qrYaw = Mathf.Atan2(qrForwardInUnity.x, qrForwardInUnity.z) * Mathf.Rad2Deg;
+                // HoloLens空間でのHoloLens前方のヨー角
+                float cameraYaw = Mathf.Atan2(cameraForwardInUnity.x, cameraForwardInUnity.z) * Mathf.Rad2Deg;
 
-                // 真北 = QRのヨー角 - スマホが地球空間で北から離れているヨー角
-                northYRotationOffset = qrYaw - phoneYaw;
-                Debug.Log($"[LocationResolver] phoneYaw={phoneYaw:F1}°, qrYaw={qrYaw:F1}°, northOffset={northYRotationOffset:F1}°");
+                // 真北 = HoloLens(cameraYaw)のヨー角 - スマホ(phoneYaw)のヨー角
+                // (スマホの生データは背面カメラ側を向いており、MainCameraも同じ向きのため180度反転は不要)
+                northYRotationOffset = cameraYaw - phoneYaw;
+                northYRotationOffset = Mathf.Repeat(northYRotationOffset, 360f);
+                Debug.Log($"[LocationResolver] phoneYaw={phoneYaw:F1}°, cameraYaw={cameraYaw:F1}°, northOffset={northYRotationOffset:F1}°");
             }
             else
             {

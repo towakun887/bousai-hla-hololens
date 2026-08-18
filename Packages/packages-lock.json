@@ -46,6 +46,12 @@
       "source": "local-tarball",
       "dependencies": {}
     },
+    "com.microsoft.spatialaudio.spatializer.unity": {
+      "version": "file:MixedReality/com.microsoft.spatialaudio.spatializer.unity-2.0.55.tgz",
+      "depth": 0,
+      "source": "local-tarball",
+      "dependencies": {}
+    },
     "com.unity.burst": {
       "version": "1.8.21",
       "depth": 1,
@@ -312,6 +318,14 @@
         "com.unity.xr.legacyinputhelpers": "2.1.2"
       },
       "url": "https://packages.unity.com"
+    },
+    "org.mixedrealitytoolkit.audio": {
+      "version": "file:MixedReality/org.mixedrealitytoolkit.audio-3.0.4.tgz",
+      "depth": 0,
+      "source": "local-tarball",
+      "dependencies": {
+        "org.mixedrealitytoolkit.core": "3.0.0"
+      }
     },
     "org.mixedrealitytoolkit.core": {
       "version": "file:MixedReality/org.mixedrealitytoolkit.core-4.0.0-pre.1.tgz",

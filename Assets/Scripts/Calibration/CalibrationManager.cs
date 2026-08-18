@@ -388,11 +388,8 @@ public class CalibrationManager : MonoBehaviour
 
         if (IsDirectConnectionMock && MockModeSettings.Instance != null)
         {
-            Vector3 connectionStartForward = lastDetectedPhoneRotation * Vector3.forward;
-            float northOffset = MockModeSettings.Instance.GetNorthYRotationOffset(
-                connectionStartForward, false);
             LocationResolver.Instance.CalibrateOrigin(
-                collectedSamples, lastDetectedPhonePosition, northOffset);
+                collectedSamples, lastDetectedPhonePosition, lastDetectedPhoneRotation);
             isContinuousCalibrating = ShouldContinuouslyUpdateDirectConnectionOrigin;
             return;
         }
@@ -404,8 +401,12 @@ public class CalibrationManager : MonoBehaviour
             return;
         }
 
+        // スマホは常にMainCameraの正面にあるという仮定に基づき、QRコードの姿勢(lastDetectedPhoneRotation)
+        // の代わりにMainCameraの姿勢を使用することで、画像認識のラグやブレを排除する。
+        Quaternion assumedPhoneRotation = mainCamera != null ? mainCamera.transform.rotation : lastDetectedPhoneRotation;
+        
         LocationResolver.Instance.CalibrateOrigin(
-            collectedSamples, lastDetectedPhonePosition, lastDetectedPhoneRotation);
+            collectedSamples, lastDetectedPhonePosition, assumedPhoneRotation);
     }
 
     private static bool IsUsableLocationSample(LocationData data)
@@ -433,7 +434,7 @@ public class CalibrationManager : MonoBehaviour
         if (mainCamera == null)
             mainCamera = Camera.main;
         Vector3 originPosition = mainCamera != null ? mainCamera.transform.position : Vector3.zero;
-        float northOffset = settings.GetNorthYRotationOffset(mainCamera != null ? mainCamera.transform : null, true);
+        float northOffset = settings.GetNorthYRotationOffset(mainCamera != null ? mainCamera.transform : null);
         LocationData fixedLocation = new LocationData
         {
             isTracking = true,

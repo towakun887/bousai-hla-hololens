@@ -29,8 +29,6 @@ public class MockModeSettings : MonoBehaviour
     [SerializeField] private string connectionIp = "127.0.0.1";
     [SerializeField] private int connectionPort = 5000;
     [SerializeField] private string connectionDeviceId = "MockDevice";
-    [Tooltip("直接接続開始時にHoloLensが向いている方角です。0=北、90=東。")]
-    [SerializeField, Range(0f, 360f)] private float connectionHeadingDegrees;
     [FormerlySerializedAs("ignoreAccuracyAndContinuouslyUpdateOrigin")]
     [InspectorName("位置精度を無視")]
     [Tooltip("受信した有効な位置情報をaccuracyとisTrackingの値に関係なく使用します。")]
@@ -59,7 +57,6 @@ public class MockModeSettings : MonoBehaviour
     public string ConnectionIp => connectionIp;
     public int ConnectionPort => connectionPort;
     public string ConnectionDeviceId => connectionDeviceId;
-    public float ConnectionHeadingDegrees => connectionHeadingDegrees;
     public bool IgnoreLocationAccuracy => UseDirectConnectionMock && ignoreLocationAccuracy;
     public bool ContinuouslyUpdateOrigin => UseDirectConnectionMock && continuouslyUpdateOrigin;
     public bool UseCsvMarkerMock => useCsvMarkerMock;
@@ -90,21 +87,20 @@ public class MockModeSettings : MonoBehaviour
             Instance = null;
     }
 
-    public float GetNorthYRotationOffset(Transform referenceTransform, bool fixedLocation)
+    public float GetNorthYRotationOffset(Transform referenceTransform)
     {
         Vector3 forward = referenceTransform != null ? referenceTransform.forward : Vector3.forward;
-        return GetNorthYRotationOffset(forward, fixedLocation);
+        return GetNorthYRotationOffset(forward);
     }
 
-    public float GetNorthYRotationOffset(Vector3 referenceForward, bool fixedLocation)
+    public float GetNorthYRotationOffset(Vector3 referenceForward)
     {
         Vector3 forward = referenceForward;
         forward.y = 0f;
         float slamYaw = forward.sqrMagnitude > 0.000001f
             ? Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg
             : 0f;
-        float heading = fixedLocation ? fixedHeadingDegrees : connectionHeadingDegrees;
-        return Mathf.DeltaAngle(0f, slamYaw - heading);
+        return Mathf.DeltaAngle(0f, slamYaw - fixedHeadingDegrees);
     }
 
     private void OnValidate()
