@@ -1,11 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class MarkerManager : MonoBehaviour
 {
     public static MarkerManager Instance { get; private set; }
 
-    [SerializeField] private GameObject markerPrefab;
+    [SerializeField, FormerlySerializedAs("markerPrefab")] private GameObject firstMarkerPrefab;
+    [SerializeField] private GameObject secondMarkerPrefab;
     [SerializeField] private CsvMarkerParser csvParser;
 
     [Header("LOD")]
@@ -20,15 +22,20 @@ public class MarkerManager : MonoBehaviour
         public MarkerData Data;
         public Vector3 Position;
         public MarkerVisual Visual;
+        public int CsvIndex;
         public MarkerVisual.LodState Lod = MarkerVisual.LodState.Hidden;
     }
 
     private readonly List<MarkerRuntime> markers = new List<MarkerRuntime>();
     private readonly List<MarkerVisual> activeMarkers = new List<MarkerVisual>();
-    private readonly Stack<MarkerVisual> pool = new Stack<MarkerVisual>();
+    private readonly Stack<MarkerVisual> firstPool = new Stack<MarkerVisual>();
+    private readonly Stack<MarkerVisual> secondPool = new Stack<MarkerVisual>();
     private Camera mainCamera;
     private float nextLodTime;
     private bool isDebugMode;
+    private int activeCsvIndex;
+
+    public bool IsShowingSecondMarkers => activeCsvIndex == 1;
 
     private void Awake()
     {
@@ -100,7 +107,48 @@ public class MarkerManager : MonoBehaviour
         }
     }
 
-    private void HandleCsvParsed(List<MarkerData> parsedMarkers)
+    public void OnMarkerSetToggleClicked()
+    {
+        SetActiveCsvIndex(activeCsvIndex == 0 ? 1 : 0);
+    }
+
+    public void OnShowFirstMarkersClicked()
+    {
+        SetActiveCsvIndex(0);
+    }
+
+    public void OnShowSecondMarkersClicked()
+    {
+        SetActiveCsvIndex(1);
+    }
+
+    private void SetActiveCsvIndex(int csvIndex)
+    {
+        csvIndex = Mathf.Clamp(csvIndex, 0, 1);
+        if (activeCsvIndex == csvIndex)
+        {
+            return;
+        }
+
+        activeCsvIndex = csvIndex;
+        for (int i = 0; i < markers.Count; i++)
+        {
+            MarkerRuntime runtime = markers[i];
+            if (runtime.CsvIndex != activeCsvIndex)
+            {
+                ReturnToPool(runtime);
+                runtime.Lod = MarkerVisual.LodState.Hidden;
+            }
+        }
+
+        nextLodTime = 0f;
+        if (mainCamera != null)
+        {
+            EvaluateLods(mainCamera.transform.position);
+        }
+    }
+
+    private void HandleCsvParsed(List<MarkerData> firstMarkers, List<MarkerData> secondMarkers)
     {
         ClearMarkers();
         if (LocationResolver.Instance == null || !LocationResolver.Instance.IsCalibrated())
@@ -109,15 +157,8 @@ public class MarkerManager : MonoBehaviour
             return;
         }
 
-        for (int i = 0; i < parsedMarkers.Count; i++)
-        {
-            MarkerData data = parsedMarkers[i];
-            markers.Add(new MarkerRuntime
-            {
-                Data = data,
-                Position = ResolvePosition(data)
-            });
-        }
+        AddMarkerRuntimes(firstMarkers, 0);
+        AddMarkerRuntimes(secondMarkers, 1);
 
         if (mainCamera == null)
         {
@@ -126,6 +167,20 @@ public class MarkerManager : MonoBehaviour
         if (mainCamera != null)
         {
             EvaluateLods(mainCamera.transform.position);
+        }
+    }
+
+    private void AddMarkerRuntimes(List<MarkerData> parsedMarkers, int csvIndex)
+    {
+        for (int i = 0; i < parsedMarkers.Count; i++)
+        {
+            MarkerData data = parsedMarkers[i];
+            markers.Add(new MarkerRuntime
+            {
+                Data = data,
+                Position = ResolvePosition(data),
+                CsvIndex = csvIndex
+            });
         }
     }
 
@@ -139,6 +194,15 @@ public class MarkerManager : MonoBehaviour
         for (int i = 0; i < markers.Count; i++)
         {
             MarkerRuntime runtime = markers[i];
+            if (runtime.CsvIndex != activeCsvIndex)
+            {
+                if (runtime.Visual != null || runtime.Lod != MarkerVisual.LodState.Hidden)
+                {
+                    ApplyLod(runtime, MarkerVisual.LodState.Hidden);
+                }
+                continue;
+            }
+
             float distanceSqr = (runtime.Position - cameraPosition).sqrMagnitude;
             MarkerVisual.LodState next = DetermineLod(
                 runtime.Lod, distanceSqr, fullEnterSqr, fullExitSqr, visibleEnterSqr, visibleExitSqr);
@@ -194,7 +258,7 @@ public class MarkerManager : MonoBehaviour
 
         if (runtime.Visual == null)
         {
-            runtime.Visual = GetFromPool(runtime.Position);
+            runtime.Visual = GetFromPool(runtime.Position, runtime.CsvIndex);
             if (runtime.Visual == null)
             {
                 return;
@@ -209,8 +273,10 @@ public class MarkerManager : MonoBehaviour
         runtime.Lod = next;
     }
 
-    private MarkerVisual GetFromPool(Vector3 position)
+    private MarkerVisual GetFromPool(Vector3 position, int csvIndex)
     {
+        Stack<MarkerVisual> pool = csvIndex == 0 ? firstPool : secondPool;
+        GameObject markerPrefab = csvIndex == 0 ? firstMarkerPrefab : secondMarkerPrefab;
         MarkerVisual visual = null;
         while (pool.Count > 0 && visual == null)
         {
@@ -248,6 +314,7 @@ public class MarkerManager : MonoBehaviour
         runtime.Visual.PrepareForPool();
         activeMarkers.Remove(runtime.Visual);
         runtime.Visual.gameObject.SetActive(false);
+        Stack<MarkerVisual> pool = runtime.CsvIndex == 0 ? firstPool : secondPool;
         pool.Push(runtime.Visual);
         runtime.Visual = null;
     }

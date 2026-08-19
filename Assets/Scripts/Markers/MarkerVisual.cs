@@ -30,8 +30,12 @@ public class MarkerVisual : MonoBehaviour
 
     [Header("Visuals")]
     [SerializeField] private MeshRenderer pinRenderer;
+    [Tooltip("Color used for marker_kind=other and unknown marker kinds.")]
     [SerializeField] private Color normalColor = Color.blue;
+    [Tooltip("Color used for marker_kind=hazard and the legacy Warning mock value.")]
     [SerializeField] private Color warningColor = new Color(1f, 0.5f, 0f);
+    [SerializeField] private Color fireColor = new Color(0.85f, 0.08f, 0.05f);
+    [SerializeField] private Color buildingDamageColor = new Color(1f, 0.85f, 0.1f);
 
     private static readonly int ColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int LegacyColorId = Shader.PropertyToID("_Color");
@@ -73,9 +77,10 @@ public class MarkerVisual : MonoBehaviour
 
         if (pinRenderer != null)
         {
+            Color markerColor = GetMarkerColor(data.markerKind);
             pinRenderer.GetPropertyBlock(propertyBlock);
-            propertyBlock.SetColor(ColorId, data.markerKind == "Warning" ? warningColor : normalColor);
-            propertyBlock.SetColor(LegacyColorId, data.markerKind == "Warning" ? warningColor : normalColor);
+            propertyBlock.SetColor(ColorId, markerColor);
+            propertyBlock.SetColor(LegacyColorId, markerColor);
             pinRenderer.SetPropertyBlock(propertyBlock);
         }
 
@@ -88,6 +93,23 @@ public class MarkerVisual : MonoBehaviour
             errorOverlay.SetActive(false);
         }
         SetDebugMode(debugEnabled);
+    }
+
+    private Color GetMarkerColor(string markerKind)
+    {
+        switch (markerKind?.Trim().ToLowerInvariant())
+        {
+            case "fire":
+                return fireColor;
+            case "hazard":
+            case "warning":
+                return warningColor;
+            case "building_damage":
+                return buildingDamageColor;
+            case "other":
+            default:
+                return normalColor;
+        }
     }
 
     public void SetLod(LodState state)

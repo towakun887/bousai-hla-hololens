@@ -3,14 +3,17 @@ using UnityEngine.Networking;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
+using UnityEngine.Serialization;
 
 public class CsvMarkerParser : MonoBehaviour
 {
     [SerializeField] private bool verboseDevelopmentLogs;
-    [SerializeField]
-    private string csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSi8T3T1vmz4eQBrMOxWXYljtujKaNYg0IYOZI_fZxhH-l0diNpJfX2cjwjAVbVWds9g_d3_Y2iQfC9/pub?gid=1057226757&single=true&output=csv";
+    [SerializeField, FormerlySerializedAs("csvUrl")]
+    private string firstCsvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSi8T3T1vmz4eQBrMOxWXYljtujKaNYg0IYOZI_fZxhH-l0diNpJfX2cjwjAVbVWds9g_d3_Y2iQfC9/pub?gid=1057226757&single=true&output=csv";
+    [SerializeField] private string secondCsvUrl;
 
-    public Action<List<MarkerData>> OnCsvParsed;
+    public Action<List<MarkerData>, List<MarkerData>> OnCsvParsed;
     public Action<string> OnError;
 
     public void LoadCsv()
@@ -18,7 +21,10 @@ public class CsvMarkerParser : MonoBehaviour
         MockModeSettings mockSettings = MockModeSettings.Instance;
         if (mockSettings != null && mockSettings.UseCsvMarkerMock)
         {
-            OnCsvParsed?.Invoke(CreateMockMarkers(mockSettings.MarkerCount));
+            List<MarkerData> secondMockMarkers = string.IsNullOrWhiteSpace(secondCsvUrl)
+                ? new List<MarkerData>()
+                : CreateMockMarkers(mockSettings.MarkerCount);
+            OnCsvParsed?.Invoke(CreateMockMarkers(mockSettings.MarkerCount), secondMockMarkers);
             return;
         }
         StartCoroutine(DownloadAndParseCsvCoroutine());
@@ -26,26 +32,51 @@ public class CsvMarkerParser : MonoBehaviour
 
     public void SetCsvUrl(string url)
     {
-        csvUrl = url;
+        firstCsvUrl = url;
+    }
+
+    public void SetCsvUrls(string firstUrl, string secondUrl)
+    {
+        firstCsvUrl = firstUrl;
+        secondCsvUrl = secondUrl;
     }
 
     private IEnumerator DownloadAndParseCsvCoroutine()
     {
-        using (UnityWebRequest www = UnityWebRequest.Get(csvUrl))
-        {
-            yield return www.SendWebRequest();
+        List<MarkerData> firstMarkers = new List<MarkerData>();
+        List<MarkerData> secondMarkers = new List<MarkerData>();
+        bool downloadedAnyCsv = false;
 
-            if (www.result != UnityWebRequest.Result.Success)
+        string[] urls = { firstCsvUrl, secondCsvUrl };
+        List<MarkerData>[] results = { firstMarkers, secondMarkers };
+        for (int i = 0; i < urls.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(urls[i]))
             {
-                Debug.LogError($"[CSV] Error downloading CSV: {www.error}");
-                OnError?.Invoke(www.error);
-                yield break;
+                continue;
             }
 
-            string csvText = www.downloadHandler.text;
-            List<MarkerData> markers = ParseCsv(csvText);
-            LogVerbose($"[CSV] Successfully parsed {markers.Count} markers.");
-            OnCsvParsed?.Invoke(markers);
+            using (UnityWebRequest www = UnityWebRequest.Get(urls[i]))
+            {
+                yield return www.SendWebRequest();
+
+                if (www.result != UnityWebRequest.Result.Success)
+                {
+                    string message = $"CSV {i + 1}: {www.error}";
+                    Debug.LogError($"[CSV] Error downloading {message}");
+                    OnError?.Invoke(message);
+                    continue;
+                }
+
+                results[i].AddRange(ParseCsv(www.downloadHandler.text));
+                downloadedAnyCsv = true;
+                LogVerbose($"[CSV] Successfully parsed {results[i].Count} markers from CSV {i + 1}.");
+            }
+        }
+
+        if (downloadedAnyCsv)
+        {
+            OnCsvParsed?.Invoke(firstMarkers, secondMarkers);
         }
     }
 
@@ -72,7 +103,8 @@ public class CsvMarkerParser : MonoBehaviour
                 if (values.Length < headerMap.Count) continue;
 
                 MarkerData marker = new MarkerData();
-                marker.serializedTime = GetValue(values, headerMap, "serialized_time");
+                marker.serializedTime = FormatSerializedTime(
+                    GetValue(values, headerMap, "serialized_time"));
                 marker.markerKind = GetValue(values, headerMap, "marker_kind");
                 marker.title = GetValue(values, headerMap, "title");
                 marker.detail = GetValue(values, headerMap, "detail");
@@ -113,6 +145,20 @@ public class CsvMarkerParser : MonoBehaviour
             }
         }
         return "";
+    }
+
+    private static string FormatSerializedTime(string value)
+    {
+        if (DateTimeOffset.TryParse(
+                value,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal,
+                out DateTimeOffset parsedTime))
+        {
+            return parsedTime.ToString("yyyy/MM/dd hh:mm:ss", CultureInfo.InvariantCulture);
+        }
+
+        return value;
     }
 
     private string[] ParseCsvLine(string line)
@@ -171,7 +217,7 @@ public class CsvMarkerParser : MonoBehaviour
             bool photo = mockSettings != null && mockSettings.MarkerMockIncludesPhotos && i % 3 == 0;
             result.Add(new MarkerData
             {
-                serializedTime = "2026-08-05 12:00:00",
+                serializedTime = "2026/08/05 12:00:00",
                 markerKind = i % 5 == 0 ? "Warning" : "Info",
                 title = $"Mock Marker {i + 1}",
                 detail = $"Performance test marker at approximately {distance:F0}m",

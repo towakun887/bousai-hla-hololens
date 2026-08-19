@@ -16,6 +16,8 @@ public class ObjectSpawner : MonoBehaviour
     public float maxRandomScale = 1.0f;
     [Tooltip("各岩が自身のスポーン地点からXZ方向にこの距離を超えたら削除します。Y方向は無視します")]
     [Min(0f)] public float despawnDistanceFromSpawn = 10f;
+    [Tooltip("岩のワールドY座標がこの値を下回ったら削除します")]
+    public float despawnBelowWorldY = -1f;
 
     [Header("QTY投下設定")]
     [Tooltip("1回のQTYで投下する個数")]
@@ -62,7 +64,12 @@ public class ObjectSpawner : MonoBehaviour
     }
 
     public void doubleDrop(){
+        StartCoroutine(DoubleDropRoutine());
+    }
+
+    private IEnumerator DoubleDropRoutine(){
         StartCoroutine(DropRandomScaleByQty());
+        yield return new WaitForSeconds(2.0f);
         StartCoroutine(DropRandomScaleByQty());
     }
 
@@ -150,7 +157,9 @@ public class ObjectSpawner : MonoBehaviour
 
             Vector3 offset = spawned.Instance.transform.position - spawned.SpawnPosition;
             float horizontalDistanceSquared = offset.x * offset.x + offset.z * offset.z;
-            if (horizontalDistanceSquared <= maxDistanceSquared)
+            bool isWithinHorizontalRange = horizontalDistanceSquared <= maxDistanceSquared;
+            bool isAboveMinimumY = spawned.Instance.transform.position.y >= despawnBelowWorldY;
+            if (isWithinHorizontalRange && isAboveMinimumY)
                 continue;
 
             spawnedObjects.RemoveAt(i);
