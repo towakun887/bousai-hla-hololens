@@ -22,6 +22,7 @@ public class SettingsPanel : MonoBehaviour
     [Tooltip("ON: 国土地理院の標高JSONを使用 / OFF: 空間認識した地表面を使用")]
     [SerializeField] private StatefulInteractable elevationModeToggle;
     [SerializeField] private FloodDepthController floodController;
+    [SerializeField] private GroundSurfaceResolver groundSurfaceResolver;
 
     [Header("Data / Drift")]
     [SerializeField] private TMP_InputField csvUrlInput;
@@ -41,6 +42,10 @@ public class SettingsPanel : MonoBehaviour
             floodController = FloodDepthController.Instance != null
                 ? FloodDepthController.Instance
                 : FindFirstObjectByType<FloodDepthController>();
+        if (groundSurfaceResolver == null)
+            groundSurfaceResolver = GroundSurfaceResolver.Instance != null
+                ? GroundSurfaceResolver.Instance
+                : FindFirstObjectByType<GroundSurfaceResolver>();
 
         if (qrCodeTracker == null)
             qrCodeTracker = QRCodeTracker.Instance != null
@@ -113,6 +118,7 @@ public class SettingsPanel : MonoBehaviour
 
         floodController?.SetFloodDisplayEnabled(displayEnabled);
         floodController?.SetHeightReferenceMode(mode);
+        groundSurfaceResolver?.SetMode(mode);
     }
 
     private void InitializeQrAndMapSettings()
@@ -185,6 +191,7 @@ public class SettingsPanel : MonoBehaviour
         FloodHeightReferenceMode mode = elevationModeToggle.IsToggled.Active
             ? FloodHeightReferenceMode.TerrainElevation
             : FloodHeightReferenceMode.GroundSurface;
+        groundSurfaceResolver?.SetMode(mode);
         floodController?.SetHeightReferenceMode(mode);
     }
 

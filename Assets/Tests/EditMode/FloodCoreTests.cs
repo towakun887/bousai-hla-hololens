@@ -1,4 +1,5 @@
 using Bousai.Flood;
+using Bousai.Dosha;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -45,6 +46,67 @@ namespace Bousai.Flood.Tests
         {
             Assert.IsFalse(FloodDepthLegend.TryClassify(new Color32(255, 183, 183, 0), 9, out _, out _));
             Assert.IsFalse(FloodDepthLegend.TryClassify(new Color32(0, 255, 0, 255), 9, out _, out _));
+        }
+
+        [TestCase(165, 0, 33, DoshaHazardType.DebrisFlow, DoshaHazardZone.SpecialWarning)]
+        [TestCase(183, 51, 77, DoshaHazardType.DebrisFlow, DoshaHazardZone.SpecialWarning)]
+        [TestCase(230, 200, 50, DoshaHazardType.DebrisFlow, DoshaHazardZone.Warning)]
+        [TestCase(235, 211, 91, DoshaHazardType.DebrisFlow, DoshaHazardZone.Warning)]
+        [TestCase(250, 40, 0, DoshaHazardType.SteepSlopeCollapse, DoshaHazardZone.SpecialWarning)]
+        [TestCase(251, 83, 51, DoshaHazardType.SteepSlopeCollapse, DoshaHazardZone.SpecialWarning)]
+        [TestCase(250, 230, 0, DoshaHazardType.SteepSlopeCollapse, DoshaHazardZone.Warning)]
+        [TestCase(251, 235, 51, DoshaHazardType.SteepSlopeCollapse, DoshaHazardZone.Warning)]
+        [TestCase(180, 0, 40, DoshaHazardType.Landslide, DoshaHazardZone.SpecialWarning)]
+        [TestCase(195, 51, 83, DoshaHazardType.Landslide, DoshaHazardZone.SpecialWarning)]
+        [TestCase(255, 153, 0, DoshaHazardType.Landslide, DoshaHazardZone.Warning)]
+        [TestCase(255, 173, 51, DoshaHazardType.Landslide, DoshaHazardZone.Warning)]
+        public void DoshaLegend_ClassifiesEachHazardAndZone(
+            int r, int g, int b,
+            DoshaHazardType type,
+            DoshaHazardZone expected)
+        {
+            Assert.IsTrue(DoshaHazardLegend.TryClassify(
+                new Color32((byte)r, (byte)g, (byte)b, 255),
+                type,
+                9,
+                out DoshaHazardZone actual,
+                out bool exact));
+            Assert.AreEqual(expected, actual);
+            Assert.IsTrue(exact);
+        }
+
+        [Test]
+        public void DoshaLegend_DoesNotApplyAnotherHazardTypesColors()
+        {
+            Assert.IsFalse(DoshaHazardLegend.TryClassify(
+                new Color32(255, 150, 0, 255),
+                DoshaHazardType.DebrisFlow,
+                9,
+                out _,
+                out _));
+        }
+
+        [Test]
+        public void DoshaResult_OrsHazardTypesAndKeepsBothZones()
+        {
+            DoshaHazardResult result = new DoshaHazardResult(
+                DoshaHazardStatus.Available,
+                string.Empty,
+                35d,
+                139d,
+                DoshaHazardType.DebrisFlow | DoshaHazardType.Landslide,
+                DoshaHazardType.SteepSlopeCollapse);
+
+            Assert.AreEqual(
+                DoshaHazardType.DebrisFlow |
+                DoshaHazardType.SteepSlopeCollapse |
+                DoshaHazardType.Landslide,
+                result.HazardTypes);
+            Assert.IsTrue(result.HasWarningZone);
+            Assert.IsTrue(result.HasSpecialWarningZone);
+            Assert.AreEqual(
+                DoshaHazardZone.Warning | DoshaHazardZone.SpecialWarning,
+                result.Zones);
         }
 
         [TestCase(1.99f, 2f, 3f, false)]

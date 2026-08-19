@@ -1,3 +1,4 @@
+using Bousai.Dosha;
 using Bousai.Flood;
 using TMPro;
 using UnityEngine;
@@ -7,6 +8,7 @@ public class FloodStatusHUD : MonoBehaviour
 
     [SerializeField] private TextMeshProUGUI floodStatusText;
     private FloodDepthController subscribedController;
+    private DoshaTileClient subscribedDoshaClient;
     private string lastText;
 
     private void Awake()
@@ -29,7 +31,7 @@ public class FloodStatusHUD : MonoBehaviour
 
     private void Update()
     {
-        if (subscribedController == null)
+        if (subscribedController == null || subscribedDoshaClient == null)
             Subscribe();
     }
 
@@ -41,11 +43,22 @@ public class FloodStatusHUD : MonoBehaviour
     private void Subscribe()
     {
         FloodDepthController controller = FloodDepthController.Instance;
-        if (controller == null || controller == subscribedController)
-            return;
-        Unsubscribe();
-        subscribedController = controller;
-        subscribedController.StatusChanged += Refresh;
+        if (controller != null && controller != subscribedController)
+        {
+            if (subscribedController != null)
+                subscribedController.StatusChanged -= Refresh;
+            subscribedController = controller;
+            subscribedController.StatusChanged += Refresh;
+        }
+
+        DoshaTileClient doshaClient = FindFirstObjectByType<DoshaTileClient>();
+        if (doshaClient != null && doshaClient != subscribedDoshaClient)
+        {
+            if (subscribedDoshaClient != null)
+                subscribedDoshaClient.StatusChanged -= Refresh;
+            subscribedDoshaClient = doshaClient;
+            subscribedDoshaClient.StatusChanged += Refresh;
+        }
         Refresh();
     }
 
@@ -53,7 +66,10 @@ public class FloodStatusHUD : MonoBehaviour
     {
         if (subscribedController != null)
             subscribedController.StatusChanged -= Refresh;
+        if (subscribedDoshaClient != null)
+            subscribedDoshaClient.StatusChanged -= Refresh;
         subscribedController = null;
+        subscribedDoshaClient = null;
     }
 
     private void Refresh()
@@ -62,7 +78,7 @@ public class FloodStatusHUD : MonoBehaviour
             return;
 
         FloodDepthController controller = FloodDepthController.Instance;
-        bool shouldShow = controller == null || controller.IsFloodDisplayEnabled;
+        bool shouldShow = subscribedDoshaClient != null || controller == null || controller.IsFloodDisplayEnabled;
         if (floodStatusText.enabled != shouldShow)
             floodStatusText.enabled = shouldShow;
         if (!shouldShow)
@@ -70,7 +86,11 @@ public class FloodStatusHUD : MonoBehaviour
 
         FloodDepthResult result = controller != null ? controller.CurrentResult : null;
         string value;
-        if (result == null)
+        if (controller != null && !controller.IsFloodDisplayEnabled)
+        {
+            value = "洪水表示: OFF\nFlood Pane: 非表示";
+        }
+        else if (result == null)
         {
             value = $"洪水浸水高: N/A\n状態: 初期化待ち";
         }
@@ -106,9 +126,41 @@ public class FloodStatusHUD : MonoBehaviour
             }
         }
 
+        value += "\n\n" + BuildDoshaStatus();
+
         if (lastText == value)
             return;
         lastText = value;
         floodStatusText.text = value;
+    }
+
+    private string BuildDoshaStatus()
+    {
+        DoshaTileClient client = subscribedDoshaClient;
+        if (client == null)
+            return "土砂災害: Client待ち";
+
+        DoshaHazardResult result = client.CurrentResult;
+        if (result == null)
+            return $"土砂災害: N/A\n状態: {client.DiagnosticStatus}";
+
+        string time = result.RetrievedAt.ToString("HH:mm:ss");
+        string types = GetHazardTypesLabel(result.HazardTypes);
+        return $"土砂災害: {result.Message}\n種別: {types}\n位置: {result.Latitude:F6}, {result.Longitude:F6}\n状態: {result.Status} | 更新: {time}";
+    }
+
+    private static string GetHazardTypesLabel(DoshaHazardType types)
+    {
+        if (types == DoshaHazardType.None)
+            return "該当なし";
+
+        string value = string.Empty;
+        if ((types & DoshaHazardType.DebrisFlow) != 0)
+            value = "土石流";
+        if ((types & DoshaHazardType.SteepSlopeCollapse) != 0)
+            value += (value.Length > 0 ? " / " : string.Empty) + "急傾斜地の崩壊";
+        if ((types & DoshaHazardType.Landslide) != 0)
+            value += (value.Length > 0 ? " / " : string.Empty) + "地すべり";
+        return value;
     }
 }

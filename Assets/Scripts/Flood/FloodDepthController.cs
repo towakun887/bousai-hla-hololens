@@ -19,6 +19,9 @@ public class FloodDepthController : MonoBehaviour
     [SerializeField] private GameObject floodPane;
     [Tooltip("FloodPaneと同時に表示・非表示を切り替える物差しオブジェクトです。")]
     [SerializeField] private GameObject rulerObject;
+    [Tooltip("設定水位がしきい値を超えたとき、水面の上昇開始と同時に再生するオブジェクトです。")]
+    [SerializeField] private GameObject animatedFloodObject;
+    [SerializeField, Min(0f)] private float animatedObjectDepthThresholdMeters = 1.5f;
     [Tooltip("Rulerの0m位置です。未設定時はRuler配下RendererのWorld Bounds下端を使用します。")]
     [SerializeField] private Transform rulerZeroPoint;
     [SerializeField] private Transform trackedPose;
@@ -29,7 +32,7 @@ public class FloodDepthController : MonoBehaviour
     [SerializeField, Min(0.02f)] private float groundCheckIntervalSeconds = 0.1f;
 
     [Header("Pane")]
-    [SerializeField, Min(0.05f)] private float heightTransitionSeconds = 1f;
+    [SerializeField, Min(0.05f)] private float heightTransitionSeconds = 3f;
     [SerializeField, Min(0f)] private float heightChangeEpsilon = 0.01f;
     [Tooltip("Rulerの0m位置へ加えるWorld Y補正値です。通常は0です。")]
     [SerializeField] private float rulerZeroHeightOffsetMeters;
@@ -47,6 +50,7 @@ public class FloodDepthController : MonoBehaviour
     private Coroutine activeRequest;
 
     private bool hasDepth;
+    private float configuredDepthMeters;
     private float currentDepthMeters;
     private bool paneReady;
     private float nextGroundCheckTime;
@@ -98,6 +102,7 @@ public class FloodDepthController : MonoBehaviour
             PlayerPrefs.GetInt(HeightReferenceModePreferenceKey, 0), 0, 1);
         ResolveReferences();
         SetPaneActive(false);
+        SetAnimatedFloodObjectActive(false);
         currentResult = new FloodDepthResult(
             FloodDepthStatus.WaitingForCalibration, "位置基準の確定待ち");
     }
@@ -208,6 +213,7 @@ public class FloodDepthController : MonoBehaviour
 
     public void SetHeightReferenceMode(FloodHeightReferenceMode mode)
     {
+        groundResolver?.SetMode(mode);
         if (heightReferenceMode == mode)
             return;
 
@@ -328,6 +334,7 @@ public class FloodDepthController : MonoBehaviour
         }
 
         hasDepth = true;
+        configuredDepthMeters = result.DepthBand.DisplayHeightMeters;
         currentDepthMeters = GetAdjustedFloodHeight(result.DepthBand.DisplayHeightMeters);
         currentElevation = elevation;
 
@@ -366,18 +373,12 @@ public class FloodDepthController : MonoBehaviour
 
     private void UpdatePaneFromElevation()
     {
-        if (!hasDepth || currentElevation == null || !currentElevation.HasElevation ||
-            LocationResolver.Instance == null || !LocationResolver.Instance.IsCalibrated())
+        if (!hasDepth || groundResolver == null || trackedPose == null ||
+            !groundResolver.TryGetGroundY(trackedPose.position, out float referenceY))
         {
             HidePaneForMissingReference();
             return;
         }
-
-        LocationData originGps = LocationResolver.Instance.GetOriginGps();
-        Vector3 originUnity = LocationResolver.Instance.GetOriginUnity();
-        float referenceY = TerrainElevationMath.ToUnityY(
-            originUnity.y, originGps.altitude,
-            currentElevation.ElevationMeters, 0f);
         float targetY = referenceY + currentDepthMeters;
         rulerOrientation?.SetSurfaceNormal(Vector3.up);
         SetPaneTargetY(targetY, referenceY);
@@ -392,11 +393,14 @@ public class FloodDepthController : MonoBehaviour
 
         if (!hasPositionedPane || !floodPane.activeSelf)
         {
-            SetPaneY(targetY);
+            SetPaneY(referenceY);
+            transitionStartY = referenceY;
             transitionTargetY = targetY;
+            transitionStartTime = Time.unscaledTime;
             hasPositionedPane = true;
-            isTransitioning = false;
+            isTransitioning = !Mathf.Approximately(referenceY, targetY);
             SetPaneActive(true);
+            StartAnimatedFloodObjectIfNeeded();
             SetPaneReady(true);
             return;
         }
@@ -448,6 +452,7 @@ public class FloodDepthController : MonoBehaviour
         }
 
         hasDepth = true;
+        configuredDepthMeters = mockHeight;
         currentDepthMeters = GetAdjustedFloodHeight(mockHeight);
         FloodDepthBand mockBand = new FloodDepthBand(
             $"{mockHeight:0.0}m (Mock)", mockHeight, mockHeight,
@@ -551,6 +556,7 @@ public class FloodDepthController : MonoBehaviour
     private void ClearDepthAndPane()
     {
         hasDepth = false;
+        configuredDepthMeters = 0f;
         currentDepthMeters = 0f;
         HidePaneForMissingReference();
     }
@@ -565,6 +571,7 @@ public class FloodDepthController : MonoBehaviour
         hasPositionedPane = false;
         isTransitioning = false;
         SetPaneActive(false);
+        SetAnimatedFloodObjectActive(false);
         SetPaneReady(false);
     }
 
@@ -619,6 +626,28 @@ public class FloodDepthController : MonoBehaviour
             floodPane.SetActive(active);
         if (rulerObject != null && rulerObject.activeSelf != active)
             rulerObject.SetActive(active);
+    }
+
+    private void StartAnimatedFloodObjectIfNeeded()
+    {
+        if (animatedFloodObject == null ||
+            configuredDepthMeters <= animatedObjectDepthThresholdMeters)
+            return;
+
+        animatedFloodObject.SetActive(true);
+        Animator animator = animatedFloodObject.GetComponentInChildren<Animator>(true);
+        if (animator == null)
+            return;
+
+        animator.enabled = true;
+        animator.Rebind();
+        animator.Update(0f);
+    }
+
+    private void SetAnimatedFloodObjectActive(bool active)
+    {
+        if (animatedFloodObject != null && animatedFloodObject.activeSelf != active)
+            animatedFloodObject.SetActive(active);
     }
 
     private void SetPaneReady(bool ready)

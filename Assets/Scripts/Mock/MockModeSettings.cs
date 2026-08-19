@@ -14,6 +14,16 @@ public class MockModeSettings : MonoBehaviour
         OneHundred = 100
     }
 
+    public enum DoshaHazardMockLevel
+    {
+        [InspectorName("なし")]
+        None = 0,
+        [InspectorName("Lv1／1段目（警戒区域）")]
+        Level1WarningZone = 1,
+        [InspectorName("Lv2／2段目（特別警戒区域）")]
+        Level2SpecialWarningZone = 2
+    }
+
     [Header("Location Mock: Fixed Coordinates (no QR / no TCP)")]
     [Tooltip("入力座標を現在のSLAM位置へ直接割り当て、QR検出と位置情報通信を行いません。接続情報Mockと同時ONの場合はこちらを優先します。")]
     [SerializeField] private bool useFixedLocationMock;
@@ -47,6 +57,10 @@ public class MockModeSettings : MonoBehaviour
     [SerializeField] private bool useFloodDepthMock;
     [SerializeField, Min(0f)] private float floodDepthMeters = 1f;
 
+    [Header("土砂災害 Mock")]
+    [InspectorName("土砂災害危険度")]
+    [SerializeField] private DoshaHazardMockLevel doshaHazardMockLevel = DoshaHazardMockLevel.None;
+
     public bool UseFixedLocationMock => useFixedLocationMock;
     public bool UseDirectConnectionMock => useDirectConnectionMock && !useFixedLocationMock;
     public bool HasAnyLocationMock => useFixedLocationMock || useDirectConnectionMock;
@@ -65,6 +79,8 @@ public class MockModeSettings : MonoBehaviour
     public string MarkerMockImageFileId => markerMockImageFileId;
     public bool UseFloodDepthMock => useFloodDepthMock;
     public float FloodDepthMeters => Mathf.Max(0f, floodDepthMeters);
+    public DoshaHazardMockLevel DoshaHazardMock => doshaHazardMockLevel;
+    public bool UseDoshaHazardMock => doshaHazardMockLevel != DoshaHazardMockLevel.None;
 
     private void Awake()
     {
