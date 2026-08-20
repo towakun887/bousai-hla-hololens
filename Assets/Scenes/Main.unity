@@ -11382,7 +11382,7 @@ MonoBehaviour:
   markerMockIncludesPhotos: 0
   markerMockImageFileId: 
   useFloodDepthMock: 1
-  floodDepthMeters: 0.5
+  floodDepthMeters: 0
   doshaHazardMockLevel: 2
 --- !u!1 &1854259306
 GameObject:

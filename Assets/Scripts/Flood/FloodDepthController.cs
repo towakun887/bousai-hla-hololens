@@ -143,6 +143,9 @@ public class FloodDepthController : MonoBehaviour
             return;
 
         bool useMock = UseMockMode;
+        if (useMock && !hasDepth)
+            return;
+
         if (useMock && heightReferenceMode == FloodHeightReferenceMode.GroundSurface)
         {
             CheckGroundAndUpdatePane();
@@ -448,6 +451,14 @@ public class FloodDepthController : MonoBehaviour
         {
             SetResult(new FloodDepthResult(
                 FloodDepthStatus.WaitingForCalibration, "位置基準の確定待ち"));
+            return;
+        }
+
+        if (mockHeight <= 0f)
+        {
+            ClearDepthAndPane();
+            SetResult(new FloodDepthResult(
+                FloodDepthStatus.NoData, "浸水なし (Mock)"));
             return;
         }
 
